@@ -10,7 +10,7 @@ const auth = require('./middlewares/adminAuth');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const app = express();
-const PORT = 3001;
+const PORT = 3005;
 
 // Connect to MongoDB
 app.use(cors({
