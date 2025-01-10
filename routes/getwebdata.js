@@ -88,6 +88,7 @@ router.get('/industry/get', async (req, res) => {
   }
 });
 
+
   
 router.get('/product/get', async (req, res) => {
   try {
