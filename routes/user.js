@@ -32,9 +32,9 @@ router.post('/login', async (req, res) => {
     
     const token = jwt.sign({ userId: user._id }, JWT_SECRET);
     res.cookie('user', token, {
-      httpOnly: false,
-      secure: false,
-      sameSite: '',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
       path: '/',
     });
 
