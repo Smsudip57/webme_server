@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
+const Service = require('../models/service');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -170,6 +171,95 @@ router.get('/user/logout', (req, res) => {
       return res.status(500).json({ error: 'An error occurred during logout.' });
     }
   });
+
+
+
+  router.post('/user/book', async (req, res) => {
+    try {
+      const { serviceId, userId, time } = req.body;
+  
+      // Validate required fields
+      if (!serviceId || !userId || !time) {
+        return res.status(400).json({ error: 'Service ID, User ID, and Time are required.' });
+      }
+  
+      // Validate the time format
+      const bookingTime = new Date(time);
+      if (isNaN(bookingTime.getTime())) {
+        return res.status(400).json({ error: 'Invalid time format.' });
+      }
+  
+      // Find the user and service
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+  
+      const service = await Service.findById(serviceId);
+      if (!service) {
+        return res.status(404).json({ error: 'Service not found.' });
+      }
+  
+      // Check if the user already has a booking for the same service and time
+      const existingBooking = user.booking.find(
+        (booking) =>
+          booking.service.toString() === service._id.toString()
+      );
+  
+      if (existingBooking) {
+        return res.status(400).json({ error: 'User already has a booking for this service at the selected time.' });
+      }
+  
+      // Add the new booking
+      user.booking.push({ service: service._id, time: bookingTime });
+      await user.save();
+  
+      return res.status(200).json({ message: 'Booking successful.' });
+    } catch (error) {
+      console.error('Error during booking:', error);
+      return res.status(500).json({ error: 'An error occurred during booking.' });
+    }
+  });
+  
+  
+  
+  router.post('/user/cancelbook', async (req, res) => {
+    try {
+      const { serviceId, userId } = req.body;
+  
+      // Validate required fields
+      if (!serviceId || !userId) {
+        return res.status(400).json({ error: 'Service ID, User ID, and Time are required.' });
+      }
+  
+  
+      // Find the user and service
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+  
+      // Check if the user already has a booking for the same service and time
+      const updatedBooking = user.booking.filter(
+        (booking) =>
+          booking.service.toString() !== serviceId.toString()
+      );
+  
+      // Add the new booking
+      user.booking = updatedBooking
+      await user.save();
+      return res.status(200).json({ message: 'Booking Canceled!' });
+    } catch (error) {
+      console.error('Error during booking:', error);
+      return res.status(500).json({ error: 'An error occurred during booking.' });
+    }
+  });
+
+
+
+
+
+
 
 
 

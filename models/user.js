@@ -27,14 +27,22 @@ const userSchema = new mongoose.Schema({
       type: String,
       trim: true
     },
-    bio: {
+    companyRole: {
       type: String,
       maxlength: 300
     },
     avatarUrl: {
       type: String,
       default: 'https://default-avatar-url.com'
-    }
+    },
+    companyImgaUrl: {
+      type: String,
+      default: 'https://default-avatar-url.com'
+    },
+    companyName: {
+      type: String,
+      trim: true
+    },
   },
   payment:{
     status: {
@@ -50,6 +58,18 @@ const userSchema = new mongoose.Schema({
     {
     type: [mongoose.Schema.Types.ObjectId],
     ref: 'Service'
+  }
+ ],
+ booking:[
+  {
+    service: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service'
+    },
+    time: {
+      type: Date,
+      required: [true, 'Time is required'],
+    }
   }
  ],
  isActive: {

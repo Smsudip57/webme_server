@@ -6,11 +6,21 @@ const user = require('./routes/user');
 const serviceproject = require('./routes/serviceproject'); 
 const industrytestimonial = require('./routes/industrytestimonial'); 
 const webdata = require('./routes/getwebdata'); 
+const chat = require('./routes/chatSession');
 const auth = require('./middlewares/adminAuth');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const app = express();
 const PORT = 3005;
+
+
+const http = require('http'); // Required to integrate Socket.IO
+const { Server } = require('socket.io'); // Import the Socket.IO server
+const setupSocket = require('./socket/socket');
+
+
+const server = http.createServer(app); // Create the HTTP server for Express and Socket.IO
+const io = setupSocket(server);
 
 // Connect to MongoDB
 app.use(cors({
@@ -35,6 +45,7 @@ app.use('/api',auth, industrytestimonial);
 app.use(express.json());
 app.use('/api', webdata); 
 app.use('/api', user);
+app.use('/api/chat', chat);
 
 app.use((req, res, next) => {
     console.log(`Path hit: ${req.originalUrl}`);
@@ -44,7 +55,7 @@ app.use((req, res, next) => {
 
 const start = async () => {
   await dbConnect();
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
 };
