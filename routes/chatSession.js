@@ -44,7 +44,6 @@ router.post('/start-session', async (req, res) => {
 
 
 router.get('/fetch-session', async (req, res) => {
-<<<<<<< HEAD
   try {
     const { userid } = req.query;
     if ( !userid) {
@@ -53,8 +52,6 @@ router.get('/fetch-session', async (req, res) => {
   
     let find;
   
-=======
->>>>>>> 58d1f41ede12dd4d7b7cb7f8c0adc0b796c0401b
     try {
         
         const { userid } = req.query;
@@ -74,8 +71,7 @@ router.get('/fetch-session', async (req, res) => {
     } catch (error) {
         return res.status(401).json({ message: 'Invalid user ID' });
     }
-<<<<<<< HEAD
-      
+
     
 
   // Fetch the session details from the database
@@ -92,8 +88,7 @@ router.get('/fetch-session', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch session' });
   }
   
-=======
-    
+
     
     
     // Fetch the session details from the database
@@ -107,7 +102,7 @@ router.get('/fetch-session', async (req, res) => {
 } catch (error) {
     res.status(500).json({ message: 'Failed to fetch session' });
 }
->>>>>>> 58d1f41ede12dd4d7b7cb7f8c0adc0b796c0401b
+
 });
 
 
