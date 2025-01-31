@@ -27,6 +27,14 @@ const userSchema = new mongoose.Schema({
       type: String,
       trim: true
     },
+    phoneNumber:{
+      type: String,
+      trim: true
+    },
+    address: {
+      type: String,
+      trim: true
+    },
     companyRole: {
       type: String,
       maxlength: 300
@@ -35,7 +43,7 @@ const userSchema = new mongoose.Schema({
       type: String,
       default: 'https://default-avatar-url.com'
     },
-    companyImgaUrl: {
+    companyImageUrl: {
       type: String,
       default: 'https://default-avatar-url.com'
     },

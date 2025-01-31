@@ -83,7 +83,7 @@ const setupSocket = (server) => {
 
         try {
             setTimeout(async() => {
-                const session = await Session.findById(sessionId).populate('user').populate('service');
+                const session = await Session.findById(sessionId).populate('user')
             io.emit('new-session-started', session);
             }, 3000);
         } catch (error) {
