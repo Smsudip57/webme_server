@@ -44,6 +44,7 @@ router.post('/start-session', async (req, res) => {
 
 
 router.get('/fetch-session', async (req, res) => {
+<<<<<<< HEAD
   try {
     const { userid } = req.query;
     if ( !userid) {
@@ -52,16 +53,28 @@ router.get('/fetch-session', async (req, res) => {
   
     let find;
   
+=======
+>>>>>>> 58d1f41ede12dd4d7b7cb7f8c0adc0b796c0401b
     try {
-      const user = await User.findById(userid);
+        
+        const { userid } = req.query;
+        if ( !userid) {
+            return res.status(401).json({ message: 'No session token provided' });
+        }
+        
+        let find;
+        
+    try {
+        const user = await User.findById(userid);
       if(user){
-        find = { user: user._id, status: 'active' };
-      }else{
-        find = { unregisteredUserToken: token, status: 'active' };
-      }
+          find = { user: user._id, status: 'active' };
+        }else{
+            find = { unregisteredUserToken: token, status: 'active' };
+        }
     } catch (error) {
         return res.status(401).json({ message: 'Invalid user ID' });
     }
+<<<<<<< HEAD
       
     
 
@@ -79,6 +92,22 @@ router.get('/fetch-session', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch session' });
   }
   
+=======
+    
+    
+    
+    // Fetch the session details from the database
+    const session = await Session.find(find);
+    
+    if (!session) {
+        return res.status(404).json({ message: 'Session not found' });
+    }
+    
+    res.json(session);
+} catch (error) {
+    res.status(500).json({ message: 'Failed to fetch session' });
+}
+>>>>>>> 58d1f41ede12dd4d7b7cb7f8c0adc0b796c0401b
 });
 
 
