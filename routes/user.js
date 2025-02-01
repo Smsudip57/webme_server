@@ -5,6 +5,50 @@ const User = require('../models/user');
 const Service = require('../models/service');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+const multer = require("multer");
+const path = require('path');
+const UPLOAD_DIR = path.join(process.cwd(), 'public');
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, UPLOAD_DIR); 
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+
+// File filter for images only
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only image files are allowed!"), false);
+  }
+};
+
+const upload = multer({ storage, fileFilter });
+
+const auth = async (req, res, next) => {
+  try {
+    const token = req.cookies.user;
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Error during authentication:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong' });
+  }
+};
 
 router.post('/login', async (req, res) => {
   try {
@@ -25,7 +69,8 @@ router.post('/login', async (req, res) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
-        error: 'Invalid email or password.',
+        success: false,
+        message: 'Invalid email or password.',
       });
     }
     
@@ -127,7 +172,7 @@ router.get('/getuserinfo', async (req, res) => {
         error: 'Invalid or expired token.',
       });
     }
-    
+
     const { userId } = decoded;
 
     const user = await User.findById(userId).select('-password');
@@ -257,7 +302,57 @@ router.get('/user/logout', (req, res) => {
 
 
 
+  router.put("/user/update",auth, upload.fields([{ name: "profilePhoto" }, { name: "companyLogo" }]), async (req, res) => {
+    try {
+      const {_id: userId} = req.user
+      const {  name, phoneNumber, address, companyRole, companyName, newPassword, oldPassword } = req.body;
+  
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+  
+      if (!oldPassword) {
+        return res.status(400).json({ success: false, message: "Password is required" });
+      }
+      const isMatch = await bcrypt.compare(oldPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: "Incorrect password" });
+      }
 
+      if (newPassword) {
+        user.password = await bcrypt.hash(newPassword, 10);
+      }
+  
+
+      user.profile.name = name || user.profile.name;
+      user.profile.phoneNumber = phoneNumber || user.profile.phoneNumber;
+      user.profile.address = address || user.profile.address;
+      user.profile.companyRole = companyRole || user.profile.companyRole;
+      user.profile.companyName = companyName || user.profile.companyName;
+  
+      
+      if (req.files["profilePhoto"]) {
+        user.profile.avatarUrl = `${process.env.Current_Url}/${req.files["profilePhoto"][0].filename}`;
+      }
+      if (req.files["companyLogo"]) {
+        user.profile.companyImageUrl = `${process.env.Current_Url}/${req.files["companyLogo"][0].filename}`;
+      }
+  
+
+      await user.save();
+  
+      return res.status(200).json({
+        success: true,
+        message: "Profile updated successfully",
+        user,
+      });
+  
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+  });
 
 
 

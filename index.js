@@ -24,7 +24,7 @@ const io = setupSocket(server);
 
 // Connect to MongoDB
 app.use(cors({
-    origin: ['http://localhost:3000', process.env.Client_Url],
+    origin: ['http://localhost:3001', process.env.Client_Url],
     credentials: true
 }))
 app.use(express.static('public'));
@@ -42,7 +42,15 @@ app.get('/', (req, res) => {
 })
 app.use('/api',auth, serviceproject);
 app.use('/api',auth, industrytestimonial);
-app.use(express.json());
+app.use((req, res, next) => {
+  const paths = ["/api/user/update"];
+  if (paths.includes(req.path)) {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
+// app.use(express.json());
 app.use('/api', webdata); 
 app.use('/api', user);
 app.use('/api/chat', chat);
@@ -54,7 +62,11 @@ app.use((req, res, next) => {
   });
 
 const start = async () => {
-  await dbConnect();
+  try {
+    await dbConnect();
+  } catch (error) {
+    console.log(error);
+  }
   server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
