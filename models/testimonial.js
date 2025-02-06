@@ -7,6 +7,10 @@ const testimonialSchema = new mongoose.Schema(
       required: [true, 'Testimonial is required'],
       trim: true,
     },
+    video:{
+        type: String,
+        required: [true, 'Video is required'],
+    },
     image: {
       type: String,
       required: [true, 'Image is required'],
@@ -20,15 +24,15 @@ const testimonialSchema = new mongoose.Schema(
         required: [true, 'Role of the author is required'],
     },
     relatedService:{
-        type: [mongoose.Schema.Types.ObjectId],
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'Service'
     },
     relatedIndustries:{
-        type: [mongoose.Schema.Types.ObjectId],
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'Industry'
     },
     relatedUser:{
-        type: [mongoose.Schema.Types.ObjectId],
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     }
 }
