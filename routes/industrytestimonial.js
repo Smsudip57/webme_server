@@ -29,48 +29,66 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
+const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
 
-router.post('/testimonial/create', upload.single('image'), async (req, res) => {
+router.post('/testimonial/create', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { Testimonial: TestimonialText, postedBy, role, relatedService, relatedIndustries } = req.body;
+
+    if (!TestimonialText || !postedBy || !role || !req.files.image || !req.files.video) {
+      return res.status(400).json({
+        success: false,
+        message: 'All information are required.',
+      });
+    }
+
+    const imageUrl = getFileUrl(req.files.image[0].filename);
+    const videoUrl = getFileUrl(req.files.video[0].filename);
+
     try {
-      const { Testimonial: TestimonialText, postedBy, role, relatedService, relatedIndustry } = req.body;
-  
-      // Validate required fields
-      if (!TestimonialText || !postedBy || !role || !req.file) {
-        return res.status(400).json({
-          success: false,
-          message: 'Testimonial, PostedBy, Role, and Image are required',
-        });
-      }
-  
-      const imageUrl = getImageUrl(req.file.filename); // Public access path for the uploaded image
-  
-      // Save the testimonial data to MongoDB
       const newTestimonial = new Testimonial({
         Testimonial: TestimonialText,
         postedBy,
         role,
         relatedService,
-        relatedIndustry,
+        relatedIndustries,
         image: imageUrl,
+        video: videoUrl, // ✅ Save video URL
       });
-  
+
       await newTestimonial.save();
-  
-      return res.status(200).json({
+
+      return res.status(201).json({
         success: true,
         message: 'Testimonial created successfully',
         testimonial: newTestimonial,
       });
-    } catch (error) {
-      console.error('Error creating testimonial:', error);
+    } catch (dbError) {
+      console.error('Error saving to database:', dbError);
+      
+      // Delete files if database save fails
+      if (req.files.image) fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
+      if (req.files.video) fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
+
       return res.status(500).json({
         success: false,
-        message: 'Error creating testimonial',
+        message: 'Error saving testimonial data. Files deleted.',
       });
     }
-  });
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    
+    // Delete files if any other error occurs
+    if (req.files.image) fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
+    if (req.files.video) fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
 
+    return res.status(500).json({
+      success: false,
+      message: 'Unexpected error occurred while creating testimonial.',
+    });
+  }
+});
 
   router.post('/testimonial/edit', upload.single('image'), async (req, res) => {
     try {

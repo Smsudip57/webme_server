@@ -55,8 +55,9 @@ router.get('/project/get', async (req, res) => {
 router.get('/testimonial/get', async (req, res) => {
   try {
     const testimonials = await Testimonial.find()
-      .populate('relatedService')
-      .populate('relatedIndustry')
+    .populate('relatedService') 
+    .populate('relatedIndustries')
+    .populate('relatedUser')
       .exec();
     return res.status(200).json({
       success: true,
