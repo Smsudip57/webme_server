@@ -6,6 +6,23 @@ const sessionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User' 
       },
+    uid:{
+      email: {
+        type: String,
+        required: [true, 'Email is required'],
+        trim: true
+      },
+      name : {
+        type: String,
+        required: [true, 'Name is required'],
+        trim: true
+      },
+      uid: {
+        type: String,
+        required: [true, 'UID is required'],
+        trim: true
+      }
+    },
     type:{
         type: String,
         required: [true, 'Type is required'],

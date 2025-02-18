@@ -4,15 +4,83 @@ const Session = require('../models/session');
 const User = require('../models/user');
 const Service = require('../models/service');
 const socket = require('socket.io');
+const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
+
 
 router.post('/start-session', async (req, res) => {
   try {
-    const { serviceId, userId, type } = req.body;
+    const guestCookie = req.cookies.session_uid;
+    const { email , name , userId, type } = req.body;
 
     const user = await User.findById(userId);
-    if(!user){
-        return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      const createsession = async (email, name) => {
+        if (email && name) {
+          const generateUid = uuidv4();
+          const token = jwt.sign({ uid: generateUid }, process.env.JWT_SECRET);
+    
+          res.cookie('session_uid', token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'strict',
+            path: '/',
+          });
+    
+          const newSession = new Session({
+            uid: {
+              email: email,
+              name: name,
+              uid: generateUid
+            },
+            status: 'active',
+            type: type
+          });
+    
+          await newSession.save();
+          return newSession; // ✅ Return session instead of sending response
+        }
+        return null; // ✅ Return null if email/name is missing
+      };
+    
+      if (guestCookie) {
+        let decoded;
+        try {
+          decoded = jwt.verify(guestCookie, process.env.JWT_SECRET);
+        } catch (error) {
+          res.cookie('session_uid', '', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/',
+          });
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+    
+        const session = await Session.findOne({
+          "uid.uid": decoded.uid,
+          status: 'active',
+          type: type
+        });
+    
+        if (!session) {
+          const newSession = await createsession(email, name);
+          if (!newSession) {
+            return res.status(400).json({ error: 'Could not create session' }); // ✅ Handle session creation failure
+          }
+          return res.status(201).json({ sessionId: newSession._id });
+        }
+    
+        return res.status(200).json({ sessionId: session._id });
+      } else {
+        const newSession = await createsession(email, name);
+        if (!newSession) {
+          return res.status(400).json({ error: 'Could not create session' }); // ✅ Prevent duplicate response
+        }
+        return res.status(201).json({ sessionId: newSession._id }); // ✅ Send response only once
+      }
     }
+    
 
 //   const service = await Service.findOne({ _id: serviceId });
 //   if (!service) {
@@ -44,10 +112,40 @@ router.post('/start-session', async (req, res) => {
 
 
 router.get('/fetch-session', async (req, res) => {
+  const guestCookie = req.cookies.session_uid;
   try {
     const { userid } = req.query;
     if ( !userid) {
-      return res.status(401).json({ message: 'No session token provided' });
+      if(guestCookie){
+        let decoded 
+        try {
+          decoded = jwt.verify(guestCookie, process.env.JWT_SECRET);
+        } catch (error) {
+          res.cookie('session_uid', '', {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'strict',
+            path: '/',
+          });
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const session = await Session.find({ 
+          "uid.uid":decoded.uid,
+          status: 'active'
+        });
+        if (!session) {
+          res.cookie('session_uid', '', {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'strict',
+            path: '/',
+          });
+          return res.status(404).json({ error: 'Session not found' });
+        }
+        return res.status(200).json(session);
+      }else{
+        return res.status(404).json({ message: 'Session not found' });
+      }
     }
   
     let find;
@@ -70,7 +168,7 @@ router.get('/fetch-session', async (req, res) => {
     return res.status(404).json({ message: 'Session not found' });
   }
 
-  res.json(session);
+  return res.json(session);
     
   } catch (error) {
     console.error('Error fetching session:', error);
