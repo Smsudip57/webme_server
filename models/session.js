@@ -9,17 +9,14 @@ const sessionSchema = new mongoose.Schema({
     uid:{
       email: {
         type: String,
-        required: [true, 'Email is required'],
         trim: true
       },
       name : {
         type: String,
-        required: [true, 'Name is required'],
         trim: true
       },
       uid: {
         type: String,
-        required: [true, 'UID is required'],
         trim: true
       }
     },

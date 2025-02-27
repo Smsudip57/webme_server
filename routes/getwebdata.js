@@ -11,6 +11,8 @@ const Testimonial = require('../models/testimonial');
 const Industry = require('../models/industry');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+const blog = require('../models/blog'); 
+const Blog = require('../models/blog');
 
 router.get('/service/getservice' , async (req, res) => {
   try {
@@ -106,6 +108,20 @@ router.get('/product/get', async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+router.get('/blog/get', async (req, res) => {
+  try {
+
+    // Step 4: Fetch all products from the database
+    const blogs = await Blog.find(); // Add filters or pagination if needed
+    // Step 5: Return the products data in the response
+    return res.status(200).json({ success: true, blogs });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 

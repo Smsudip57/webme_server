@@ -10,6 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = path.join(process.cwd(), 'public');
 const Project = require('../models/project');
 const formidable = require('formidable');
+const Blog = require('../models/blog');
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -450,5 +451,34 @@ router.post('/project/edit', async (req, res) => {
     }
   });
   
+
+  router.post("/blog/create", upload.single("image"), async (req, res) => {
+    try {
+      const { type, title, description, points, relatedService, relatedIndustries } = req.body;
+      const image = req.file ? getImageUrl(req.file.filename) : null;
+      if (!type || !title || !description || !image || !points) {
+        return res.status(400).json({success: false, message: "All required fields must be provided" });
+      }
+  
+      // Parse points if it's sent as a JSON string
+      const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
+  
+      const newBlog = new Blog({
+        type,
+        image,
+        title,
+        description,
+        points: parsedPoints,
+        relatedService,
+        relatedIndustries,
+      });
+  
+      await newBlog.save();
+      return res.status(201).json({success: true, message: "Blog created successfully" });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  });
 
 module.exports = router;
