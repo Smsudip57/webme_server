@@ -122,7 +122,7 @@ router.post(
     try {
       const {
         testimonialId,
-        Testimonial:TestimonialText,
+        Testimonial: TestimonialText,
         postedBy,
         role,
         relatedService,
@@ -184,160 +184,184 @@ router.post(
       }
 
       await testimonial.save();
-      return res
-        .status(200)
-        .json({
-          success: true,
-          message: "Testimonial updated successfully.",
-          testimonial,
-        });
+      return res.status(200).json({
+        success: true,
+        message: "Testimonial updated successfully.",
+        testimonial,
+      });
     } catch (error) {
       console.error("Error updating testimonial:", error);
-      return res
-        .status(500)
-        .json({
-          success: false,
-          message: "Something went wrong. Please try again.",
-        });
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong. Please try again.",
+      });
     }
   }
 );
 
+router.post(
+  "/industry/create",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "logo", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        Title,
+        Heading,
+        detail,
+        Efficiency,
+        costSaving,
+        customerSatisfaction,
+      } = req.body;
 
-router.post("/industry/create", upload.single("image"), async (req, res) => {
-  try {
-    const {
-      Title,
-      Heading,
-      detail,
-      Efficiency,
-      costSaving,
-      customerSatisfaction,
-    } = req.body;
+      const files = req.files; // Access uploaded files
+      const image = files.image ? files.image[0] : null;
+      const logo = files.logo ? files.logo[0] : null;
+      if (!Title || !Heading || !detail || !image || !logo) {
+        return res.status(400).json({
+          success: false,
+          message: "Title, Heading, detail, and image are required.",
+        });
+      }
 
-    const image = req.file; // Access the uploaded file
-    if (!Title || !Heading || !detail || !image) {
-      return res.status(400).json({
+      const imageUrl = getImageUrl(image.filename);
+      const logoUrl = getImageUrl(logo.filename);
+
+      const newIndustry = new Industry({
+        Title,
+        Heading,
+        detail,
+        Efficiency: Number(Efficiency) || 0,
+        costSaving: Number(costSaving) || 0,
+        customerSatisfaction: Number(customerSatisfaction) || 0,
+        image: imageUrl,
+        logo: logoUrl,
+      });
+
+      await newIndustry.save();
+
+      return res.status(201).json({
+        success: true,
+        message: "Industry created successfully.",
+        industry: newIndustry,
+      });
+    } catch (error) {
+      console.error("Error creating industry:", error);
+      return res.status(500).json({
         success: false,
-        message: "Title, Heading, detail, and image are required.",
+        message: "Something went wrong. Please try again.",
       });
     }
-
-    const imageUrl = getImageUrl(image.filename); // Public access path for the image
-
-    const newIndustry = new Industry({
-      Title,
-      Heading,
-      detail,
-      Efficiency: Number(Efficiency) || 0,
-      costSaving: Number(costSaving) || 0,
-      customerSatisfaction: Number(customerSatisfaction) || 0,
-      image: imageUrl,
-    });
-
-    await newIndustry.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Industry created successfully.",
-      industry: newIndustry,
-    });
-  } catch (error) {
-    console.error("Error creating industry:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong. Please try again.",
-    });
   }
-});
+);
 
-router.post("/industry/edit", upload.single("image"), async (req, res) => {
-  try {
-    const {
-      id,
-      Title,
-      Heading,
-      detail,
-      Efficiency,
-      costSaving,
-      customerSatisfaction,
-    } = req.body;
-    const image = req.file;
+router.post(
+  "/industry/edit",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "logo", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        id,
+        Title,
+        Heading,
+        detail,
+        Efficiency,
+        costSaving,
+        customerSatisfaction,
+      } = req.body;
 
-    if (!id || !Title || !Heading || !detail) {
-      return res.status(400).json({
-        success: false,
-        message: "ID, Title, Heading, and Detail are required.",
-      });
-    }
+      if (!id || !Title || !Heading || !detail) {
+        return res.status(400).json({
+          success: false,
+          message: "ID, Title, Heading, and Detail are required.",
+        });
+      }
 
-    const industry = await Industry.findById(id);
-    if (!industry) {
-      return res.status(404).json({
-        success: false,
-        message: "Industry not found.",
-      });
-    }
+      const industry = await Industry.findById(id);
+      if (!industry) {
+        return res.status(404).json({
+          success: false,
+          message: "Industry not found.",
+        });
+      }
 
-    let imageUrl = industry.image;
-    if (image) {
-      const filePath = path.join(process.cwd(), "public", image.filename);
-      imageUrl = getImageUrl(image.filename);
+      const files = req.files; // Access uploaded files
+      const image = files.image ? files.image[0] : null;
+      const logo = files.logo ? files.logo[0] : null;
 
-      // Delete the old image if it exists
-      try {
-        if (
-          industry.image &&
-          existsSync(
-            path.join(process.cwd(), "public", industry.image.split("/").pop())
-          )
-        ) {
-          await fs.unlink(
-            path.join(process.cwd(), "public", industry.image.split("/").pop())
+      let imageUrl = industry.image; // Default to existing image
+      let logoUrl = industry.logo; // Default to existing logo
+
+      // Handle image update
+      if (image) {
+        imageUrl = getImageUrl(image.filename);
+
+        // Delete the old image if it exists
+        try {
+          const oldImagePath = path.join(
+            process.cwd(),
+            "public",
+            industry.image.split("/").pop()
           );
+          if (industry.image && fs.existsSync(oldImagePath)) {
+            await fs.promises.unlink(oldImagePath);
+          }
+        } catch (error) {
+          console.log("Error deleting old image:", error);
         }
-      } catch (error) {
-        console.log(error);
       }
 
-      try {
-        const imagePath = path.join(
-          process.cwd(),
-          "public",
-          industry.image.split("/").pop()
-        );
-        if (industry.image && fs.existsSync(imagePath)) {
-          await fs.promises.unlink(imagePath); // Use promises for async
+      // Handle logo update
+      if (logo) {
+        logoUrl = getImageUrl(logo.filename);
+
+        // Delete the old logo if it exists
+        try {
+          const oldLogoPath = path.join(
+            process.cwd(),
+            "public",
+            industry.logo.split("/").pop()
+          );
+          if (industry.logo && fs.existsSync(oldLogoPath)) {
+            await fs.promises.unlink(oldLogoPath);
+          }
+        } catch (error) {
+          console.log("Error deleting old logo:", error);
         }
-      } catch (error) {
-        console.log(error);
       }
+
+      // Update fields
+      industry.Title = Title;
+      industry.Heading = Heading;
+      industry.detail = detail;
+      if (Efficiency) industry.Efficiency = Number(Efficiency);
+      if (costSaving) industry.costSaving = Number(costSaving);
+      if (customerSatisfaction)
+        industry.customerSatisfaction = Number(customerSatisfaction);
+      industry.image = imageUrl;
+      industry.logo = logoUrl;
+
+      await industry.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Industry updated successfully.",
+        updatedIndustry: industry,
+      });
+    } catch (error) {
+      console.error("Error updating industry:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong. Please try again.",
+      });
     }
-
-    industry.Title = Title;
-    industry.Heading = Heading;
-    industry.detail = detail;
-    if (Efficiency) industry.Efficiency = Efficiency;
-    if (costSaving) industry.costSaving = costSaving;
-    if (customerSatisfaction)
-      industry.customerSatisfaction = customerSatisfaction;
-    industry.image = imageUrl;
-
-    await industry.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Industry updated successfully.",
-      updatedIndustry: industry,
-    });
-  } catch (error) {
-    console.error("Error updating industry:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong. Please try again.",
-    });
   }
-});
+);
 
 router.use("/industry/delete", express.json());
 

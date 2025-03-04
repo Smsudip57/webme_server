@@ -21,6 +21,10 @@ const industrySchema = new mongoose.Schema(
       type: String,
       required: [true, 'Image is required'],
     },
+    logo: {
+      type: String,
+      required: [true, 'Image is required'],
+    },
     Efficiency:{
         type: Number
     },
