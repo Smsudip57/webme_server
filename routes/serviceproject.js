@@ -481,4 +481,58 @@ router.post('/project/edit', async (req, res) => {
     }
   });
 
+
+
+
+
+
+router.post("/blog/edit", upload.single("image"), async (req, res) => {
+  try {
+    const { blogId, type, title, description, points, relatedService, relatedIndustries } = req.body;
+    
+    if (!blogId) {
+      return res.status(400).json({ success: false, message: "Blog ID is required" });
+    }
+
+    const blog = await Blog.findById(blogId);
+    if (!blog) {
+      return res.status(404).json({ success: false, message: "Blog not found" });
+    }
+
+    if (type) blog.type = type;
+    if (title) blog.title = title;
+    if (description) blog.description = description;
+    
+    if (req.file) {
+      if (blog.image) {
+        const oldImagePath = path.join(process.cwd(), 'public', blog.image.split('/').pop());
+        try {
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        } catch (err) {
+          console.error('Error deleting old blog image:', err);
+        }
+      }
+      blog.image = getImageUrl(req.file.filename);
+    }
+
+    if (points) {
+      const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
+      blog.points = parsedPoints;
+    }
+
+    if (relatedService) blog.relatedService = relatedService;
+    if (relatedIndustries) blog.relatedIndustries = relatedIndustries;
+
+    await blog.save();
+    return res.status(200).json({ success: true, message: "Blog updated successfully" });
+  } catch (error) {
+    console.error("Error updating blog:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
 module.exports = router;
