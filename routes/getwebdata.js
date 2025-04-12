@@ -13,6 +13,8 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const blog = require('../models/blog'); 
 const Blog = require('../models/blog');
+const KnowledgeBase = require('../models/knowledgebase');
+const Faq = require('../models/faq');
 
 router.get('/service/getservice' , async (req, res) => {
   try {
@@ -122,6 +124,39 @@ router.get('/blog/get', async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+router.get('/knowledgebase/get', async (req, res) => {
+  try {
+    const knowledgebases = await KnowledgeBase.find().populate('relatedServices');
+    return res.status(200).json({
+      success: true,
+      knowledgebases,
+    });
+  } catch (error) {
+    console.error('Error fetching knowledgebase:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch knowledgebase. Please try again.',
+    });
+  }
+});
+
+
+router.get('/faq/get', async (req, res) => {
+  try {
+    const faqs = await Faq.find().populate('relatedServices').populate('relatedIndustries');
+    return res.status(200).json({
+      success: true,
+      faqs,
+    });
+  } catch (error) {
+    console.error('Error fetching FAQs:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch FAQs. Please try again.',
+    });
   }
 });
 

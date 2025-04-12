@@ -1,11 +1,11 @@
 const socketio = require('socket.io');
 const Session = require('../models/session'); // Update path based on your folder structure
 const session = require('../models/session');
-
+const Client_UrlwithWww = process.env.Client_Url.replace('https://', 'https://www.')
 const setupSocket = (server) => {
     const io = socketio(server, {
         cors: {
-          origin: ['http://localhost:3000', process.env.Client_Url], 
+          origin: ['http://localhost:3000', process.env.Client_Url, Client_UrlwithWww], 
           methods: ['GET', 'POST'], 
           credentials: true,
         },

@@ -22,9 +22,10 @@ const setupSocket = require('./socket/socket');
 const server = http.createServer(app); // Create the HTTP server for Express and Socket.IO
 const io = setupSocket(server);
 
+const Client_UrlwithWww = process.env.Client_Url.replace('https://', 'https://www.');
 // Connect to MongoDB
 app.use(cors({
-    origin: ['http://localhost:3000', process.env.Client_Url],
+    origin: ['http://localhost:3000', process.env.Client_Url, Client_UrlwithWww],
     credentials: true
 }))
 app.use(express.static('public'));

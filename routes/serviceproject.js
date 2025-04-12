@@ -11,6 +11,8 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public');
 const Project = require('../models/project');
 const formidable = require('formidable');
 const Blog = require('../models/blog');
+const KnowledgeBase = require('../models/knowledgebase');
+const Faq = require('../models/faq');
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -530,6 +532,206 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
   } catch (error) {
     console.error("Error updating blog:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+router.use("/knowledgebase/create",express.json())
+router.post("/knowledgebase/create", async (req, res) => {
+  try {
+    const { 
+      title, 
+      introduction, 
+      mainSections, 
+      conclusion, 
+      tags,
+      relatedService,
+      relatedIndustries,
+      status = 'draft'
+    } = req.body;
+    // Check required fields
+    // console.log(req.body)
+    if (!title || !introduction || !conclusion || !mainSections) {
+      return res.status(400).json({
+        success: false,
+        message: "Required fields are missing"
+      });
+    }
+
+    // Parse mainSections if it's sent as a string
+    let parsedMainSections;
+    try {
+      parsedMainSections = typeof mainSections === 'string' 
+        ? JSON.parse(mainSections) 
+        : mainSections;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid mainSections format"
+      });
+    }
+
+    // Parse tags if they're sent as a string
+    const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+
+    const newArticle = new KnowledgeBase({
+      title,
+      introduction,
+      mainSections: parsedMainSections,
+      conclusion,
+      tags: parsedTags || [],
+      relatedServices: relatedService,
+      relatedIndustries: relatedIndustries || [],
+      status
+    });
+
+    await newArticle.save();
+    // console.log(newArticle)
+
+    return res.status(201).json({
+      success: true,
+      message: "Knowledge base article created successfully",
+      KnowledgeBase: newArticle
+    });
+
+  } catch (error) {
+    console.error("Error creating knowledge base article:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+});
+
+
+router.use("/knowledgebase/edit",express.json())
+router.post("/knowledgebase/edit", async (req, res) => {
+  try {
+    const { 
+      articleId,
+      title, 
+      introduction, 
+      mainSections, 
+      conclusion, 
+      tags,
+      relatedServices,
+      relatedIndustries,
+      status
+    } = req.body;
+
+    // Check if article exists
+    if (!articleId) {
+      return res.status(400).json({
+        success: false,
+        message: "Article ID is required"
+      });
+    }
+
+    const article = await KnowledgeBase.findById(articleId);
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: "Article not found"
+      });
+    }
+
+    // Parse mainSections if it's sent as a string
+    if (mainSections) {
+      try {
+        const parsedMainSections = typeof mainSections === 'string' 
+          ? JSON.parse(mainSections) 
+          : mainSections;
+        article.mainSections = parsedMainSections;
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid mainSections format"
+        });
+      }
+    }
+
+    // Parse tags if they're sent as a string
+    if (tags) {
+      const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+      article.tags = parsedTags;
+    }
+
+    // Update other fields if provided
+    if (title) article.title = title;
+    if (introduction) article.introduction = introduction;
+    if (conclusion) article.conclusion = conclusion;
+    if (relatedServices) article.relatedServices = relatedServices;
+    if (relatedIndustries) article.relatedIndustries = relatedIndustries;
+    if (status) article.status = status;
+
+    await article.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Knowledge base article updated successfully",
+      article
+    });
+
+  } catch (error) {
+    console.error("Error updating knowledge base article:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+});
+
+
+router.use("/faq/create",express.json())
+router.post("/faq/create", async (req, res) => {
+  try {
+    const { 
+      title, 
+      questions, 
+      relatedServices, 
+      relatedIndustries 
+    } = req.body;
+
+    // Check required fields
+    if (!title || !questions || !Array.isArray(questions)) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and questions array are required"
+      });
+    }
+
+    // Validate questions format
+    for (const qa of questions) {
+      if (!qa.question || !qa.answer) {
+        return res.status(400).json({
+          success: false,
+          message: "Each question must have both question and answer fields"
+        });
+      }
+    }
+
+    // Create new FAQ
+    const newFaq = new Faq({
+      title,
+      questions,
+      relatedServices: relatedServices || null,
+      relatedIndustries: relatedIndustries || []
+    });
+
+    await newFaq.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "FAQ created successfully",
+      faq: newFaq
+    });
+
+  } catch (error) {
+    console.error("Error creating FAQ:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 });
 
