@@ -12,10 +12,10 @@ const faqSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Service'
     },
-    relatedIndustries: [{
+    relatedIndustries: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Industry'
-    }]
+    }
 }, { timestamps: true });
 
 const Faq = mongoose.models.Faq || mongoose.model("Faq", faqSchema);

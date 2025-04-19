@@ -11,12 +11,13 @@ const Testimonial = require('../models/testimonial');
 const Industry = require('../models/industry');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
-const blog = require('../models/blog'); 
+const blog = require('../models/blog');
 const Blog = require('../models/blog');
 const KnowledgeBase = require('../models/knowledgebase');
 const Faq = require('../models/faq');
+const ServiceDetails = require('../models/servicedetails');
 
-router.get('/service/getservice' , async (req, res) => {
+router.get('/service/getservice', async (req, res) => {
   try {
     const services = await Service.find({});
     return res.status(200).json({
@@ -59,9 +60,9 @@ router.get('/project/get', async (req, res) => {
 router.get('/testimonial/get', async (req, res) => {
   try {
     const testimonials = await Testimonial.find()
-    .populate('relatedService') 
-    .populate('relatedIndustries')
-    .populate('relatedUser')
+      .populate('relatedService')
+      .populate('relatedIndustries')
+      .populate('relatedUser')
       .exec();
     return res.status(200).json({
       success: true,
@@ -94,7 +95,7 @@ router.get('/industry/get', async (req, res) => {
 });
 
 
-  
+
 router.get('/product/get', async (req, res) => {
   try {
 
@@ -150,6 +151,22 @@ router.get('/faq/get', async (req, res) => {
     return res.status(200).json({
       success: true,
       faqs,
+    });
+  } catch (error) {
+    console.error('Error fetching FAQs:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch FAQs. Please try again.',
+    });
+  }
+});
+
+router.get('/servicedetails/get', async (req, res) => {
+  try {
+    const servicedetails = await ServiceDetails.find().populate('relatedServices')
+    return res.status(200).json({
+      success: true,
+      servicedetails,
     });
   } catch (error) {
     console.error('Error fetching FAQs:', error);

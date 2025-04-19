@@ -13,6 +13,7 @@ const formidable = require('formidable');
 const Blog = require('../models/blog');
 const KnowledgeBase = require('../models/knowledgebase');
 const Faq = require('../models/faq');
+const ServiceDetails = require('../models/servicedetails');
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -31,8 +32,9 @@ const storage = multer.diskStorage({
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
 
+
 const upload = multer({ storage });
-router.post('/service/createservice', upload.single('image'),  async (req, res) => {
+router.post('/service/createservice', upload.single('image'), async (req, res) => {
   try {
     const { Title, detail, moreDetail, category } = req.body;
     const file = req.file;
@@ -45,7 +47,7 @@ router.post('/service/createservice', upload.single('image'),  async (req, res) 
     console.log(imageUrl);
     const newService = new Service({
       Title,
-      deltail:detail,
+      deltail: detail,
       moreDetail,
       category,
       image: imageUrl,
@@ -66,7 +68,7 @@ router.post('/service/createservice', upload.single('image'),  async (req, res) 
 
 router.use('/service/deleteservice', express.json());
 
-router.post('/service/deleteservice',  async (req, res) => {
+router.post('/service/deleteservice', async (req, res) => {
   try {
     const { serviceId } = req.body;
     if (!serviceId) {
@@ -108,7 +110,7 @@ router.post('/service/deleteservice',  async (req, res) => {
   }
 });
 
-router.post('/service/editservice' , upload.single('image'),  async (req, res) => {
+router.post('/service/editservice', upload.single('image'), async (req, res) => {
   try {
     const { serviceId, Title, deltail, moreDetail, category } = req.body;
     const file = req.file;
@@ -177,41 +179,41 @@ router.post('/project/create', async (req, res) => {
         console.error('Formidable error:', err);
         return res.status(500).json({ success: false, message: 'Error parsing form data.' });
       }
-    
+
       console.log('Fields:', fields);
       console.log('Files:', files);
-    
+
       // Extracting plain string values from the arrays
       const Title = Array.isArray(fields.Title) ? fields.Title[0] : fields.Title;
       const detail = Array.isArray(fields.detail) ? fields.detail[0] : fields.detail;
-    
+
       // Validate required fields
       if (!Title || !detail || !files.image || !files.image[0]) {
         return res.status(400).json({ success: false, message: 'All fields are required.' });
       }
-    
+
       // Save the main project image
       const imageFile = files.image[0]; // Access the first element of the array
       if (!imageFile.filepath) {
         return res.status(400).json({ success: false, message: 'Main image upload failed.' });
       }
-    
+
       const imageFilename = `${Date.now()}-${imageFile.originalFilename}`;
       const imagePath = path.join(form.uploadDir, imageFilename);
-    
+
       try {
         fs.renameSync(imageFile.filepath, imagePath);
       } catch (error) {
         console.error('Error moving main image:', error);
         return res.status(500).json({ success: false, message: 'Error saving main image.' });
       }
-    
+
       const imageUrl = getImageUrl(imageFilename);
-    
+
       // Extract sections
       const sections = [];
       let sectionIndex = 0;
-    
+
       while (fields[`section[${sectionIndex}][Heading]`]) {
         const section = {
           Heading: Array.isArray(fields[`section[${sectionIndex}][Heading]`]) ? fields[`section[${sectionIndex}][Heading]`][0] : fields[`section[${sectionIndex}][Heading]`],
@@ -222,13 +224,13 @@ router.post('/project/create', async (req, res) => {
           subHeading3: Array.isArray(fields[`section[${sectionIndex}][subHeading3]`]) ? fields[`section[${sectionIndex}][subHeading3]`][0] : fields[`section[${sectionIndex}][subHeading3]`],
           subHeadingdetails3: Array.isArray(fields[`section[${sectionIndex}][subHeadingdetails3]`]) ? fields[`section[${sectionIndex}][subHeadingdetails3]`][0] : fields[`section[${sectionIndex}][subHeadingdetails3]`],
         };
-    
+
         const sectionImageFiles = files[`section[${sectionIndex}][image]`];
         if (sectionImageFiles && sectionImageFiles[0]) {
           const sectionImageFile = sectionImageFiles[0];
           const sectionImageFilename = `${Date.now()}-${sectionImageFile.originalFilename}`;
           const sectionImagePath = path.join(form.uploadDir, sectionImageFilename);
-    
+
           if (sectionImageFile.filepath) {
             try {
               fs.renameSync(sectionImageFile.filepath, sectionImagePath);
@@ -242,11 +244,11 @@ router.post('/project/create', async (req, res) => {
             }
           }
         }
-    
+
         sections.push(section);
         sectionIndex++;
       }
-    
+
       // Save project to database
       const newProject = new Project({
         Title,
@@ -254,7 +256,7 @@ router.post('/project/create', async (req, res) => {
         image: imageUrl,
         section: sections,
       });
-    
+
       try {
         await newProject.save();
         return res.status(201).json({
@@ -269,7 +271,7 @@ router.post('/project/create', async (req, res) => {
         });
       }
     });
-    
+
   } catch (error) {
     console.error('Error creating project:', error);
     return res.status(500).json({
@@ -356,7 +358,7 @@ router.post('/project/edit', async (req, res) => {
         if (sectionImageFile) {
           console.log('present')
           const imageFilename = `${Date.now()}-${sectionImageFile.originalFilename}`;
-        const newSectionImagePath = path.join(form.uploadDir, imageFilename);
+          const newSectionImagePath = path.join(form.uploadDir, imageFilename);
           // const newSectionImagePath = getImageUrl(sectionImageFile.originalFilename);
 
           // Delete the old section image if it exists
@@ -413,75 +415,75 @@ router.post('/project/edit', async (req, res) => {
 
 
 
-  
 
-  router.use('/project/delete', express.json());
 
-  router.post('/project/delete',  async (req, res) => {
-    try {
-      // Extract the project ID from the request body
-      const { _id } = req.body;
-  
-      if (!_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'Project ID is required.',
-        });
-      }
-  
-      // Find and delete the project
-      const project = await Project.findById(_id);
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          message: 'Project not found.',
-        });
-      }
-  
-      await project.deleteOne();
-  
-      return res.status(200).json({
-        success: true,
-        message: 'Project deleted successfully.',
-      });
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      return res.status(500).json({
+router.use('/project/delete', express.json());
+
+router.post('/project/delete', async (req, res) => {
+  try {
+    // Extract the project ID from the request body
+    const { _id } = req.body;
+
+    if (!_id) {
+      return res.status(400).json({
         success: false,
-        message: 'Something went wrong. Please try again.',
+        message: 'Project ID is required.',
       });
     }
-  });
-  
 
-  router.post("/blog/create", upload.single("image"), async (req, res) => {
-    try {
-      const { type, title, description, points, relatedService, relatedIndustries } = req.body;
-      const image = req.file ? getImageUrl(req.file.filename) : null;
-      if (!type || !title || !description || !image || !points) {
-        return res.status(400).json({success: false, message: "All required fields must be provided" });
-      }
-  
-      // Parse points if it's sent as a JSON string
-      const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
-  
-      const newBlog = new Blog({
-        type,
-        image,
-        title,
-        description,
-        points: parsedPoints,
-        relatedService,
-        relatedIndustries,
+    // Find and delete the project
+    const project = await Project.findById(_id);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found.',
       });
-  
-      await newBlog.save();
-      return res.status(201).json({success: true, message: "Blog created successfully" });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ success: false, message: "Internal server error" });
     }
-  });
+
+    await project.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Project deleted successfully.',
+    });
+  } catch (error) {
+    console.error('Error deleting project:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.',
+    });
+  }
+});
+
+
+router.post("/blog/create", upload.single("image"), async (req, res) => {
+  try {
+    const { type, title, description, points, relatedService, relatedIndustries } = req.body;
+    const image = req.file ? getImageUrl(req.file.filename) : null;
+    if (!type || !title || !description || !image || !points) {
+      return res.status(400).json({ success: false, message: "All required fields must be provided" });
+    }
+
+    // Parse points if it's sent as a JSON string
+    const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
+
+    const newBlog = new Blog({
+      type,
+      image,
+      title,
+      description,
+      points: parsedPoints,
+      relatedService,
+      relatedIndustries,
+    });
+
+    await newBlog.save();
+    return res.status(201).json({ success: true, message: "Blog created successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 
 
 
@@ -491,7 +493,7 @@ router.post('/project/edit', async (req, res) => {
 router.post("/blog/edit", upload.single("image"), async (req, res) => {
   try {
     const { blogId, type, title, description, points, relatedService, relatedIndustries } = req.body;
-    
+
     if (!blogId) {
       return res.status(400).json({ success: false, message: "Blog ID is required" });
     }
@@ -504,7 +506,7 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
     if (type) blog.type = type;
     if (title) blog.title = title;
     if (description) blog.description = description;
-    
+
     if (req.file) {
       if (blog.image) {
         const oldImagePath = path.join(process.cwd(), 'public', blog.image.split('/').pop());
@@ -536,14 +538,14 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
 });
 
 
-router.use("/knowledgebase/create",express.json())
+router.use("/knowledgebase/create", express.json())
 router.post("/knowledgebase/create", async (req, res) => {
   try {
-    const { 
-      title, 
-      introduction, 
-      mainSections, 
-      conclusion, 
+    const {
+      title,
+      introduction,
+      mainSections,
+      conclusion,
       tags,
       relatedService,
       relatedIndustries,
@@ -561,8 +563,8 @@ router.post("/knowledgebase/create", async (req, res) => {
     // Parse mainSections if it's sent as a string
     let parsedMainSections;
     try {
-      parsedMainSections = typeof mainSections === 'string' 
-        ? JSON.parse(mainSections) 
+      parsedMainSections = typeof mainSections === 'string'
+        ? JSON.parse(mainSections)
         : mainSections;
     } catch (error) {
       return res.status(400).json({
@@ -604,15 +606,15 @@ router.post("/knowledgebase/create", async (req, res) => {
 });
 
 
-router.use("/knowledgebase/edit",express.json())
+router.use("/knowledgebase/edit", express.json())
 router.post("/knowledgebase/edit", async (req, res) => {
   try {
-    const { 
+    const {
       articleId,
-      title, 
-      introduction, 
-      mainSections, 
-      conclusion, 
+      title,
+      introduction,
+      mainSections,
+      conclusion,
       tags,
       relatedServices,
       relatedIndustries,
@@ -638,8 +640,8 @@ router.post("/knowledgebase/edit", async (req, res) => {
     // Parse mainSections if it's sent as a string
     if (mainSections) {
       try {
-        const parsedMainSections = typeof mainSections === 'string' 
-          ? JSON.parse(mainSections) 
+        const parsedMainSections = typeof mainSections === 'string'
+          ? JSON.parse(mainSections)
           : mainSections;
         article.mainSections = parsedMainSections;
       } catch (error) {
@@ -682,14 +684,14 @@ router.post("/knowledgebase/edit", async (req, res) => {
 });
 
 
-router.use("/faq/create",express.json())
+router.use("/faq/create", express.json())
 router.post("/faq/create", async (req, res) => {
   try {
-    const { 
-      title, 
-      questions, 
-      relatedServices, 
-      relatedIndustries 
+    const {
+      title,
+      questions,
+      relatedServices,
+      relatedIndustries
     } = req.body;
 
     // Check required fields
@@ -715,7 +717,7 @@ router.post("/faq/create", async (req, res) => {
       title,
       questions,
       relatedServices: relatedServices || null,
-      relatedIndustries: relatedIndustries || []
+      relatedIndustries: relatedIndustries || null
     });
 
     await newFaq.save();
@@ -731,6 +733,67 @@ router.post("/faq/create", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Internal server error"
+    });
+  }
+});
+
+
+
+const nstorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'public/'); 
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExt = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + fileExt);
+  }
+});
+
+
+const nupload = multer({ 
+  storage: nstorage,
+  fileFilter: function (req, file, cb) {
+    // Accept images only
+    if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
+      return cb(new Error('Only image files are allowed!'), false);
+    }
+    cb(null, true);
+  }
+});
+
+router.post('/servicedetails/create', nupload.array('images'), async (req, res) => {
+  try {
+    const uploadedFiles = req.files.map(file =>
+      `${process.env.CURRENT_URL}/public/${file.filename}`
+    );
+
+    const parsedSections = JSON.parse(req.body.sections);
+
+    const sectionsWithImages = parsedSections.map((section, index) => {
+      return {
+        ...section,
+        image: uploadedFiles[index] || section.image 
+      };
+    });
+
+    const serviceDetails = new ServiceDetails({
+      relatedServices: req.body.relatedServices,
+      description: req.body.description,
+      sections: sectionsWithImages
+    });
+
+    const savedServiceDetail = await serviceDetails.save();
+
+    res.status(201).json({
+      success: true,
+      data: savedServiceDetail
+    });
+  } catch (error) {
+    console.error('Error creating service details:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message
     });
   }
 });
