@@ -417,85 +417,133 @@ router.delete("/industry/delete", async (req, res) => {
   }
 });
 
-router.post("/product/create", upload.single("image"), async (req, res) => {
-  try {
-    const {
-      Title,
-      detail,
-      category,
-      subHeading1,
-      subHeading1edtails,
-      subHeading2,
-      subHeading2edtails,
-      subHeading3,
-      subHeading3edtails,
-    } = req.body;
-    const image = req.file; // File uploaded by multer
+router.post("/product/create", 
+  upload.fields([
+    { name: "mainImage", maxCount: 1 },
+    { name: "sectionImages", maxCount: 10 } // Adjust based on max sections you expect
+  ]), 
+  async (req, res) => {
+    try {
+      // Extract basic product fields
+      const {
+        Title,
+        detail,
+        moreDetail,
+        category,
+        sections: sectionsJSON
+      } = req.body;
 
-    console.log("FormData Received:");
-    console.log({
-      Title,
-      detail,
-      category,
-      image,
-      subHeading1,
-      subHeading1edtails,
-      subHeading2,
-      subHeading2edtails,
-      subHeading3,
-      subHeading3edtails,
-    });
+      // Validate required fields
+      if (!Title || !detail || !moreDetail || !category || !sectionsJSON || !req.files.mainImage) {
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required: Title, detail, moreDetail, category, sections, and mainImage"
+        });
+      }
 
-    // Validate input
-    if (
-      !Title ||
-      !detail ||
-      !category ||
-      !image ||
-      !subHeading1 ||
-      !subHeading1edtails ||
-      !subHeading2 ||
-      !subHeading2edtails ||
-      !subHeading3 ||
-      !subHeading3edtails
-    ) {
-      return res.status(400).json({
+      // Get main image URL
+      const mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
+      
+      // Parse sections from JSON
+      let sectionsData;
+      try {
+        sectionsData = JSON.parse(sectionsJSON);
+        if (!Array.isArray(sectionsData) || sectionsData.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Sections must be a non-empty array"
+          });
+        }
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid sections JSON format"
+        });
+      }
+
+      // Process sections with uploaded images
+      const sectionImages = req.files.sectionImages || [];
+      let imageIndex = 0;
+      
+      const processedSections = sectionsData.map(section => {
+        // Validate section data
+        if (!section.title || !Array.isArray(section.points) || section.points.length === 0) {
+          throw new Error(`Section ${section.title || 'unknown'} is missing required fields`);
+        }
+        
+        // Use uploaded image if available, otherwise use URL from JSON
+        let sectionImage;
+        if (section.useUploadedImage && imageIndex < sectionImages.length) {
+          sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
+        } else {
+          sectionImage = section.image;
+          // Validate that image URL is provided if not uploading
+          if (!sectionImage) {
+            throw new Error(`Image is required for section: ${section.title}`);
+          }
+        }
+        
+        // Process points
+        const processedPoints = section.points.map(point => {
+          if (!point.title || !point.detail) {
+            throw new Error(`Point in section ${section.title} is missing title or detail`);
+          }
+          return {
+            title: point.title,
+            detail: point.detail
+          };
+        });
+        
+        return {
+          title: section.title,
+          image: sectionImage,
+          points: processedPoints
+        };
+      });
+
+      // Create product with processed data
+      const newProduct = new Product({
+        Title,
+        detail,
+        moreDetail,
+        image: mainImageUrl,
+        category,
+        sections: processedSections
+      });
+
+      // Save to database
+      await newProduct.save();
+      
+      return res.status(201).json({
+        success: true,
+        message: "Product created successfully",
+        product: newProduct
+      });
+      
+    } catch (error) {
+      console.error("Error creating product:", error);
+      
+      // Clean up uploaded files on error
+      try {
+        if (req.files.mainImage) {
+          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.mainImage[0].filename));
+        }
+        if (req.files.sectionImages) {
+          req.files.sectionImages.forEach(file => {
+            fs.unlinkSync(path.join(UPLOAD_DIR, file.filename));
+          });
+        }
+      } catch (cleanupError) {
+        console.error("Error cleaning up files:", cleanupError);
+      }
+      
+      return res.status(500).json({
         success: false,
-        message: "All fields are required.",
+        message: error.message || "Something went wrong. Please try again."
       });
     }
-
-    const imageUrl = getImageUrl(image.filename); // Public access path for the image
-
-    // Create new product
-    const newProduct = new Product({
-      Title,
-      detail,
-      category,
-      image: imageUrl,
-      subHeading1,
-      subHeading1edtails,
-      subHeading2,
-      subHeading2edtails,
-      subHeading3,
-      subHeading3edtails,
-    });
-
-    await newProduct.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Product created successfully.",
-    });
-  } catch (error) {
-    console.error("Error creating product:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong. Please try again.",
-    });
   }
-});
-
+);
 router.use("/product/delete", express.json());
 
 router.post("/product/delete", async (req, res) => {
@@ -534,76 +582,144 @@ router.post("/product/delete", async (req, res) => {
   }
 });
 
-router.put("/product/edit", upload.single("image"), async (req, res) => {
-  try {
-    // Parse the request body
-    const {
-      productId,
-      Title,
-      detail,
-      category,
-      subHeading1,
-      subHeading1edtails,
-      subHeading2,
-      subHeading2edtails,
-      subHeading3,
-      subHeading3edtails,
-    } = req.body;
-
-    // Get the existing product
-    const existingProduct = await Product.findById(productId);
-    if (!existingProduct) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
-    }
-
-    let newImagePath = existingProduct.image; // Default to the existing image path
-
-    // Handle the new image upload if available
-    if (req.file) {
-      const oldImagePath = path.join(
-        process.cwd(),
-        "public",
-        existingProduct.image.split("/").pop()
-      );
-      if (fs.existsSync(oldImagePath)) {
-        fs.unlinkSync(oldImagePath); // Delete the old image file if it exists
-      }
-
-      // Save the new image file path
-      newImagePath = getImageUrl(req.file.filename); // New image path stored in public
-    }
-
-    // Update the product with the new image (if provided)
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      {
+router.put("/product/edit", 
+  upload.fields([
+    { name: "mainImage", maxCount: 1 },
+    { name: "sectionImages", maxCount: 10 }
+  ]), 
+  async (req, res) => {
+    try {
+      // Extract fields from request
+      const {
+        productId,
         Title,
         detail,
+        moreDetail,
         category,
-        subHeading1,
-        subHeading1edtails,
-        subHeading2,
-        subHeading2edtails,
-        subHeading3,
-        subHeading3edtails,
-        image: newImagePath, // Use the new image path (if updated)
-      },
-      { new: true }
-    );
+        sections: sectionsJSON,
+        imagesToDelete // JSON array of image paths to delete
+      } = req.body;
 
-    if (!updatedProduct) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
+      // Validate product ID
+      if (!productId) {
+        return res.status(400).json({
+          success: false,
+          message: "Product ID is required"
+        });
+      }
+
+      // Find existing product
+      const existingProduct = await Product.findById(productId);
+      if (!existingProduct) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found"
+        });
+      }
+
+      // Handle main image update
+      let mainImageUrl = existingProduct.image;
+      if (req.files.mainImage) {
+        // Delete old image if it exists
+        try {
+          const oldImagePath = path.join(
+            UPLOAD_DIR,
+            existingProduct.image.split("/").pop()
+          );
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        } catch (error) {
+          console.error("Error deleting old main image:", error);
+        }
+        
+        // Set new image URL
+        mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
+      }
+
+      // Process sections update
+      let updatedSections;
+      if (sectionsJSON) {
+        try {
+          const sectionsData = JSON.parse(sectionsJSON);
+          
+          // Delete images that need to be removed
+          if (imagesToDelete) {
+            const imagesToRemove = JSON.parse(imagesToDelete);
+            for (const imageUrl of imagesToRemove) {
+              try {
+                const imagePath = path.join(
+                  UPLOAD_DIR,
+                  imageUrl.split("/").pop()
+                );
+                if (fs.existsSync(imagePath)) {
+                  fs.unlinkSync(imagePath);
+                }
+              } catch (error) {
+                console.error(`Error deleting image ${imageUrl}:`, error);
+              }
+            }
+          }
+
+          // Process section images
+          const sectionImages = req.files.sectionImages || [];
+          let imageIndex = 0;
+          
+          updatedSections = sectionsData.map(section => {
+            // Use uploaded image if specified
+            let sectionImage = section.image;
+            if (section.useUploadedImage && imageIndex < sectionImages.length) {
+              sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
+            }
+            
+            return {
+              title: section.title,
+              image: sectionImage,
+              points: section.points.map(point => ({
+                title: point.title,
+                detail: point.detail
+              }))
+            };
+          });
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid sections data: " + error.message
+          });
+        }
+      } else {
+        // Keep existing sections if none provided
+        updatedSections = existingProduct.sections;
+      }
+
+      // Update product with all fields
+      const updatedProduct = await Product.findByIdAndUpdate(
+        productId,
+        {
+          Title: Title || existingProduct.Title,
+          detail: detail || existingProduct.detail,
+          moreDetail: moreDetail || existingProduct.moreDetail,
+          image: mainImageUrl,
+          category: category || existingProduct.category,
+          sections: updatedSections
+        },
+        { new: true, runValidators: true }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Product updated successfully",
+        product: updatedProduct
+      });
+
+    } catch (error) {
+      console.error("Error updating product:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Something went wrong. Please try again."
+      });
     }
-
-    return res.status(200).json({ success: true, product: updatedProduct });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: "Server error" });
   }
-});
+);
 
 module.exports = router;
