@@ -6,6 +6,7 @@ const path = require('path');
 const User = require('../models/user');
 const Service = require('../models/service');
 const Product = require('../models/product');
+const ChildService = require('../models/chikdService');
 const Project = require('../models/project');
 const Testimonial = require('../models/testimonial');
 const Industry = require('../models/industry');
@@ -102,6 +103,22 @@ router.get('/product/get', async (req, res) => {
     // Step 4: Fetch all products from the database
     const products = await Product.find(); // Add filters or pagination if needed
 
+    if (products.length === 0) {
+      return res.status(404).json({ success: false, message: 'No products found' });
+    }
+
+    // Step 5: Return the products data in the response
+    return res.status(200).json({ success: true, products });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+router.get('/child/get', async (req, res) => {
+  try {
+
+    const products = await ChildService.find(); 
     if (products.length === 0) {
       return res.status(404).json({ success: false, message: 'No products found' });
     }
