@@ -7,6 +7,19 @@ const serviceSchema = new mongoose.Schema(
       required: [true, 'Title is required'],
       trim: true,
     },
+    slug:{
+      type: String,
+      required: [true, 'Slug is required'],
+      unique: true,
+      trim: true,
+      lowercase: true,
+      validate: {
+        validator: function (v) {
+          return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v);
+        },
+        message: props => `${props.value} is not a valid slug format`
+      }
+    },
     deltail:{
       type: String,
       required: [true, 'Deltail is required'],

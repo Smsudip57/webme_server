@@ -36,17 +36,35 @@ const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 const upload = multer({ storage });
 router.post('/service/createservice', upload.single('image'), async (req, res) => {
   try {
-    const { Title, detail, moreDetail, category } = req.body;
+    const { Title, detail, moreDetail, category, slug } = req.body;
     const file = req.file;
 
-    if (!Title || !detail || !moreDetail || !category || !file) {
+    if (!Title || !detail || !moreDetail || !category || !file || !slug) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
+    }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Slug must be lowercase, containing only letters, numbers, and hyphens'
+      });
+    }
+
+    // Check if slug already exists
+    const existingService = await Service.findOne({ slug });
+    if (existingService) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A service with this slug already exists. Please use a unique slug.'
+      });
     }
 
     const imageUrl = getImageUrl(file.filename);
     console.log(imageUrl);
     const newService = new Service({
       Title,
+      slug,
       deltail: detail,
       moreDetail,
       category,
@@ -112,13 +130,21 @@ router.post('/service/deleteservice', async (req, res) => {
 
 router.post('/service/editservice', upload.single('image'), async (req, res) => {
   try {
-    const { serviceId, Title, deltail, moreDetail, category } = req.body;
+    const { serviceId, Title, deltail, moreDetail, category, slug } = req.body;
     const file = req.file;
 
-    if (!serviceId || !Title || !deltail || !category || !moreDetail) {
+    if (!serviceId || !Title || !deltail || !category || !moreDetail || !slug) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required.',
+      });
+    }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Slug must be lowercase, containing only letters, numbers, and hyphens'
       });
     }
 
@@ -130,7 +156,19 @@ router.post('/service/editservice', upload.single('image'), async (req, res) => 
       });
     }
 
+    // Check if slug already exists and belongs to a different service
+    if (service.slug !== slug) {
+      const existingService = await Service.findOne({ slug });
+      if (existingService && existingService._id.toString() !== serviceId) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'A service with this slug already exists. Please use a unique slug.'
+        });
+      }
+    }
+
     service.Title = Title;
+    service.slug = slug;
     service.deltail = deltail;
     service.category = category;
     service.moreDetail = moreDetail;
