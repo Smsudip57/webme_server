@@ -1,69 +1,105 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
+const pointsSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: [true, "Point title is required"],
+    trim: true,
+  },
+  detail: {
+    type: String,
+    required: [true, "Point detail is required"],
+    trim: true,
+  },
+});
+
+const sectionsSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: [true, "Section title is required"],
+    trim: true,
+  },
+  image: {
+    type: String,
+    required: [true, "Section image is required"],
+    trim: true,
+    validate: {
+      validator: function (v) {
+        // Basic URL validation for image path
+        return /^(http|https):\/\/|^\/|^[^\/]/.test(v);
+      },
+      message: (props) => `${props.value} is not a valid image path or URL`,
+    },
+  },
+  points: {
+    type: [pointsSchema],
+    validate: {
+      validator: function (v) {
+        return v.length > 0;
+      },
+      message: "At least one point is required in a section",
+    },
+  },
+});
 
 const projectSchema = new mongoose.Schema(
   {
     Title: {
       type: String,
-      required: [true, 'Title is required'],
+      required: [true, "Title is required"],
       trim: true,
+    },
+    slug: {
+      type: String,
+      required: [true, "Slug is required"],
+      unique: true,
+      trim: true,
+      lowercase: true,
+      validate: {
+        validator: function (v) {
+          return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v);
+        },
+        message: (props) => `${props.value} is not a valid slug format`,
+      },
+    },
+    relatedServices: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Service",
+      required: [true, "Related service is required"],
     },
     detail: {
       type: String,
-      required: [true, 'Detail is required'],
+      required: [true, "Detail is required"],
       trim: true,
     },
-    image: {
-      type: String,
-      required: [true, 'Image is required'],
+    media: {
+      url: {
+        type: String,
+        required: [true, "Media URL is required"],
+      },
+      type: {
+        type: String,
+        enum: ["image", "video"],
+        required: [true, "Media type is required"],
+        default: "image",
+      },
     },
-    section: [{
-      Heading: {
-        type: String,
-        required: [true, 'Heading is required'],
-        trim: true,
+    section: {
+      type: [sectionsSchema],
+      validate: {
+        validator: function (v) {
+          return v.length > 0;
+        },
+        message: "At least one section is required in a project",
       },
-      image: {
-        type: String,
-        required: [true, 'Image1 is required'],
-      },
-      subHeading1: {
-        type: String,
-        required: [true, 'SubHeading1 is required'],
-        trim: true,
-      },
-      subHeading2: {
-        type: String,
-        required: [true, 'SubHeading2 is required'],
-        trim: true,
-      },
-      subHeading3: {
-        type: String,
-        required: [true, 'SubHeading3 is required'],
-        trim: true,
-      },
-      subHeadingdetails1: {
-        type: String,
-        required: [true, 'SubHeadingdetails1 is required'],
-        trim: true,
-      },
-      subHeadingdetails2: {
-        type: String,
-        required: [true, 'SubHeadingdetails2 is required'],
-        trim: true,
-      },
-      subHeadingdetails3: {
-        type: String,
-        required: [true, 'SubHeadingdetails3 is required'],
-        trim: true,
-      },
-    }]
+    },
   },
   {
     timestamps: true,
   }
 );
 
-const Project = mongoose.models.Project || mongoose.model('Project', projectSchema);
+const Project =
+  mongoose.models.Project || mongoose.model("Project", projectSchema);
 
 module.exports = Project;
