@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 
+
+
+
 const pointsSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -20,15 +23,14 @@ const sectionsSchema = new mongoose.Schema({
     trim: true,
   },
   image: {
-    type: String,
+    type: [String],
     required: [true, "Section image is required"],
     trim: true,
     validate: {
-      validator: function (v) {
-        // Basic URL validation for image path
-        return /^(http|https):\/\/|^\/|^[^\/]/.test(v);
+      validator: function(v) {
+        return Array.isArray(v) && v.length > 0;
       },
-      message: (props) => `${props.value} is not a valid image path or URL`,
+      message: "At least one image is required for each section"
     },
   },
   points: {

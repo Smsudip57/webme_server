@@ -209,7 +209,7 @@ router.post('/service/editservice', upload.single('image'), async (req, res) => 
 
 router.post('/project/create', async (req, res) => {
   try {
-    const form = new formidable.IncomingForm();
+    const form = new formidable.IncomingForm({ multiples: true }); // Enable handling multiple files
     form.uploadDir = UPLOAD_DIR;
     form.keepExtensions = true;
 
@@ -285,24 +285,29 @@ router.post('/project/create', async (req, res) => {
           ? fields[`section[${sectionIndex}][title]`][0] 
           : fields[`section[${sectionIndex}][title]`];
 
-        // Process section image
-        let sectionImageUrl = null;
+        // Process section images (multiple)
+        const sectionImages = [];
         const sectionImageFiles = files[`section[${sectionIndex}][image]`];
-        if (sectionImageFiles && sectionImageFiles[0]) {
-          const sectionImageFile = sectionImageFiles[0];
-          const sectionImageFilename = `${Date.now()}-${sectionImageFile.originalFilename}`;
-          const sectionImagePath = path.join(form.uploadDir, sectionImageFilename);
-
-          if (sectionImageFile.filepath) {
-            try {
-              fs.renameSync(sectionImageFile.filepath, sectionImagePath);
-              sectionImageUrl = getImageUrl(sectionImageFilename);
-            } catch (error) {
-              console.error(`Error moving section ${sectionIndex} image:`, error);
-              return res.status(500).json({
-                success: false,
-                message: `Error saving image for section ${sectionIndex}.`,
-              });
+        
+        if (sectionImageFiles) {
+          // Ensure sectionImageFiles is always treated as an array
+          const imageFilesArray = Array.isArray(sectionImageFiles) ? sectionImageFiles : [sectionImageFiles];
+          
+          for (const imageFile of imageFilesArray) {
+            if (imageFile && imageFile.filepath) {
+              const imageFilename = `${Date.now()}-${imageFile.originalFilename}`;
+              const imagePath = path.join(form.uploadDir, imageFilename);
+              
+              try {
+                fs.renameSync(imageFile.filepath, imagePath);
+                sectionImages.push(getImageUrl(imageFilename));
+              } catch (error) {
+                console.error(`Error moving section ${sectionIndex} image:`, error);
+                return res.status(500).json({
+                  success: false,
+                  message: `Error saving image for section ${sectionIndex}.`,
+                });
+              }
             }
           }
         }
@@ -330,10 +335,10 @@ router.post('/project/create', async (req, res) => {
           pointIndex++;
         }
 
-        if (title && sectionImageUrl && points.length > 0) {
+        if (title && sectionImages.length > 0 && points.length > 0) {
           sections.push({
             title,
-            image: sectionImageUrl,
+            image: sectionImages, // Now storing an array of image URLs
             points
           });
         }
@@ -379,7 +384,7 @@ router.post('/project/create', async (req, res) => {
 
 router.post('/project/edit', async (req, res) => {
   try {
-    const form = new formidable.IncomingForm();
+    const form = new formidable.IncomingForm({ multiples: true });
     form.uploadDir = UPLOAD_DIR;
     form.keepExtensions = true;
 
@@ -389,15 +394,38 @@ router.post('/project/edit', async (req, res) => {
         return res.status(500).json({ success: false, message: 'Error parsing form data.' });
       }
 
-      const _id = Array.isArray(fields._id) ? fields._id[0] : fields._id;
+      // Extract project ID
+      const projectId = Array.isArray(fields._id) ? fields._id[0] : fields._id;
+      
+      if (!projectId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Project ID is required.'
+        });
+      }
+
+      // Find existing project
+      const existingProject = await Project.findById(projectId);
+      if (!existingProject) {
+        return res.status(404).json({
+          success: false,
+          message: 'Project not found.'
+        });
+      }
+
+      // Extract basic fields
       const Title = Array.isArray(fields.Title) ? fields.Title[0] : fields.Title;
       const detail = Array.isArray(fields.detail) ? fields.detail[0] : fields.detail;
       const slug = Array.isArray(fields.slug) ? fields.slug[0] : fields.slug;
-      const mediaType = Array.isArray(fields.mediaType) ? fields.mediaType[0] : fields.mediaType;
+      const mediaType = Array.isArray(fields.mediaType) ? fields.mediaType[0] : fields.mediaType || existingProject.media.type;
       const relatedServices = Array.isArray(fields.relatedServices) ? fields.relatedServices[0] : fields.relatedServices;
 
-      if (!_id || !Title || !detail || !slug || !relatedServices) {
-        return res.status(400).json({ success: false, message: 'All fields are required, including related services.' });
+      // Validate required fields
+      if (!Title || !detail || !slug || !relatedServices) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'All fields are required, including related services.' 
+        });
       }
 
       // Validate slug format
@@ -408,14 +436,10 @@ router.post('/project/edit', async (req, res) => {
         });
       }
 
-      const project = await Project.findById(_id);
-      if (!project) {
-        return res.status(404).json({ success: false, message: 'Project not found.' });
-      }
-
-      if (project.slug !== slug) {
-        const existingProject = await Project.findOne({ slug });
-        if (existingProject && existingProject._id.toString() !== _id) {
+      // Check if slug already exists and belongs to a different project
+      if (slug !== existingProject.slug) {
+        const slugExists = await Project.findOne({ slug, _id: { $ne: projectId } });
+        if (slugExists) {
           return res.status(400).json({ 
             success: false, 
             message: 'A project with this slug already exists. Please use a unique slug.'
@@ -432,134 +456,172 @@ router.post('/project/edit', async (req, res) => {
         });
       }
 
-      let mediaUrl = project.media?.url || null;
-      let updatedMediaType = mediaType || project.media?.type || 'image';
-      
+      // Update basic project fields
+      existingProject.Title = Title;
+      existingProject.slug = slug;
+      existingProject.detail = detail;
+      existingProject.relatedServices = relatedServices;
+
+      // Process media file if provided
       if (files.media && files.media[0]) {
         const mediaFile = files.media[0];
-        const mediaFilename = `${Date.now()}-${mediaFile.originalFilename}`;
-        const mediaPath = path.join(form.uploadDir, mediaFilename);
+        if (mediaFile.filepath) {
+          const mediaFilename = `${Date.now()}-${mediaFile.originalFilename}`;
+          const mediaPath = path.join(form.uploadDir, mediaFilename);
 
-        if (project.media?.url) {
-          const oldMediaPath = path.join(UPLOAD_DIR, project.media.url.split('/').pop());
-          if (fs.existsSync(oldMediaPath)) {
-            try {
-              fs.unlinkSync(oldMediaPath);
-            } catch (error) {
-              console.error('Error deleting old media file:', error);
+          try {
+            // Delete old media file if it exists
+            if (existingProject.media && existingProject.media.url) {
+              const oldMediaPath = path.join(UPLOAD_DIR, existingProject.media.url.split('/').pop());
+              if (fs.existsSync(oldMediaPath)) {
+                fs.unlinkSync(oldMediaPath);
+              }
             }
+
+            // Save new media file
+            fs.renameSync(mediaFile.filepath, mediaPath);
+            existingProject.media.url = getImageUrl(mediaFilename);
+            existingProject.media.type = mediaType;
+          } catch (error) {
+            console.error('Error processing media file:', error);
+            return res.status(500).json({ success: false, message: 'Error saving media file.' });
           }
         }
-
-        try {
-          fs.renameSync(mediaFile.filepath, mediaPath);
-          mediaUrl = getImageUrl(mediaFilename);
-        } catch (error) {
-          console.error('Error moving media file:', error);
-          return res.status(500).json({ success: false, message: 'Error saving media file.' });
-        }
+      } else {
+        // Update media type even if no new file is uploaded
+        existingProject.media.type = mediaType;
       }
 
       // Process sections
-      const sections = [];
-      let sectionIndex = 0;
+      if (fields['section[0][title]']) {
+        const sections = [];
+        let sectionIndex = 0;
 
-      while (fields[`section[${sectionIndex}][title]`]) {
-        const title = Array.isArray(fields[`section[${sectionIndex}][title]`]) 
-          ? fields[`section[${sectionIndex}][title]`][0] 
-          : fields[`section[${sectionIndex}][title]`];
-
-        // Default to existing section image if available
-        let sectionImageUrl = project.section?.[sectionIndex]?.image || null;
-        
-        // Check for new section image
-        const sectionImageFile = files[`section[${sectionIndex}][image]`]?.[0];
-        if (sectionImageFile) {
-          const imageFilename = `${Date.now()}-${sectionImageFile.originalFilename}`;
-          const newSectionImagePath = path.join(form.uploadDir, imageFilename);
-
-          // Delete old section image if exists
-          if (sectionImageUrl) {
-            const oldSectionImagePath = path.join(UPLOAD_DIR, sectionImageUrl.split('/').pop());
-            if (fs.existsSync(oldSectionImagePath)) {
-              try {
-                fs.unlinkSync(oldSectionImagePath);
-              } catch (error) {
-                console.error('Error deleting old section image:', error);
+        while (fields[`section[${sectionIndex}][title]`]) {
+          const title = Array.isArray(fields[`section[${sectionIndex}][title]`]) 
+            ? fields[`section[${sectionIndex}][title]`][0] 
+            : fields[`section[${sectionIndex}][title]`];
+          
+          // Process section images
+          // Handle keeping existing images
+          let sectionImages = [];
+          
+          // Get images to keep from existing section
+          const keepImagesKeys = Object.keys(fields).filter(key => 
+            key.startsWith(`section[${sectionIndex}][keepImages]`)
+          );
+          
+          for (const key of keepImagesKeys) {
+            const imageUrl = Array.isArray(fields[key]) ? fields[key][0] : fields[key];
+            if (imageUrl) {
+              sectionImages.push(imageUrl);
+            }
+          }
+          
+          // Process new uploaded images
+          const sectionImageKeys = Object.keys(files).filter(key => 
+            key.startsWith(`section[${sectionIndex}][image]`)
+          );
+          
+          for (const key of sectionImageKeys) {
+            const imageFile = files[key];
+            // Handle both single file and array of files
+            const imageFiles = Array.isArray(imageFile) ? imageFile : [imageFile];
+            
+            for (const file of imageFiles) {
+              if (file && file.filepath) {
+                const imageFilename = `${Date.now()}-${file.originalFilename}`;
+                const imagePath = path.join(form.uploadDir, imageFilename);
+                
+                try {
+                  fs.renameSync(file.filepath, imagePath);
+                  sectionImages.push(getImageUrl(imageFilename));
+                } catch (error) {
+                  console.error(`Error processing section image:`, error);
+                  return res.status(500).json({
+                    success: false,
+                    message: `Error saving image for section ${sectionIndex}.`,
+                  });
+                }
               }
             }
           }
 
-          try {
-            fs.renameSync(sectionImageFile.filepath, newSectionImagePath);
-            sectionImageUrl = getImageUrl(imageFilename);
-          } catch (error) {
-            console.error('Error moving section image:', error);
-            return res.status(500).json({ success: false, message: 'Error saving section image.' });
+          // Process points for this section
+          const points = [];
+          let pointIndex = 0;
+          
+          while (fields[`section[${sectionIndex}][points][${pointIndex}][title]`]) {
+            const pointTitle = Array.isArray(fields[`section[${sectionIndex}][points][${pointIndex}][title]`])
+              ? fields[`section[${sectionIndex}][points][${pointIndex}][title]`][0]
+              : fields[`section[${sectionIndex}][points][${pointIndex}][title]`];
+              
+            const pointDetail = Array.isArray(fields[`section[${sectionIndex}][points][${pointIndex}][detail]`])
+              ? fields[`section[${sectionIndex}][points][${pointIndex}][detail]`][0]
+              : fields[`section[${sectionIndex}][points][${pointIndex}][detail]`];
+              
+            if (pointTitle && pointDetail) {
+              points.push({
+                title: pointTitle,
+                detail: pointDetail
+              });
+            }
+            
+            pointIndex++;
           }
-        }
 
-        // Process points
-        const points = [];
-        let pointIndex = 0;
-        
-        while (fields[`section[${sectionIndex}][points][${pointIndex}][title]`]) {
-          const pointTitle = Array.isArray(fields[`section[${sectionIndex}][points][${pointIndex}][title]`])
-            ? fields[`section[${sectionIndex}][points][${pointIndex}][title]`][0]
-            : fields[`section[${sectionIndex}][points][${pointIndex}][title]`];
-            
-          const pointDetail = Array.isArray(fields[`section[${sectionIndex}][points][${pointIndex}][detail]`])
-            ? fields[`section[${sectionIndex}][points][${pointIndex}][detail]`][0]
-            : fields[`section[${sectionIndex}][points][${pointIndex}][detail]`];
-            
-          if (pointTitle && pointDetail) {
-            points.push({
-              title: pointTitle,
-              detail: pointDetail
+          // Validate section has required fields
+          if (title && sectionImages.length > 0 && points.length > 0) {
+            sections.push({
+              title,
+              image: sectionImages,
+              points
             });
+          } else {
+            // Log what's missing for debugging
+            const missing = [];
+            if (!title) missing.push('title');
+            if (sectionImages.length === 0) missing.push('images');
+            if (points.length === 0) missing.push('points');
+            
+            console.warn(`Section ${sectionIndex} is missing required fields: ${missing.join(', ')}`);
           }
           
-          pointIndex++;
+          sectionIndex++;
         }
 
-        if (title && sectionImageUrl && points.length > 0) {
-          sections.push({
-            title,
-            image: sectionImageUrl,
-            points
+        // Replace sections if we have new ones
+        if (sections.length > 0) {
+          existingProject.section = sections;
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: 'At least one complete section with title, image, and points is required.'
           });
         }
-        
-        sectionIndex++;
       }
 
-      // Update project fields
-      project.Title = Title;
-      project.slug = slug;
-      project.detail = detail;
-      project.relatedServices = relatedServices;
-      project.media = {
-        url: mediaUrl,
-        type: updatedMediaType
-      };
-      
-      if (sections.length > 0) {
-        project.section = sections;
+      try {
+        await existingProject.save();
+        return res.status(200).json({
+          success: true,
+          message: 'Project updated successfully.',
+          project: existingProject
+        });
+      } catch (saveError) {
+        console.error('Error saving updated project:', saveError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to save project updates to the database.',
+          error: saveError.message
+        });
       }
-
-      // Save updated project
-      await project.save();
-
-      return res.status(200).json({ 
-        success: true, 
-        message: 'Project updated successfully.' 
-      });
     });
   } catch (error) {
     console.error('Error updating project:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Something went wrong. Please try again.' 
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.',
     });
   }
 });
@@ -597,16 +659,17 @@ router.post('/project/delete', async (req, res) => {
       }
     }
 
-    // Delete section images
     if (project.section && project.section.length > 0) {
       for (const section of project.section) {
-        if (section.image) {
-          const sectionImagePath = path.join(UPLOAD_DIR, section.image.split('/').pop());
-          if (fs.existsSync(sectionImagePath)) {
-            try {
-              fs.unlinkSync(sectionImagePath);
-            } catch (error) {
-              console.error('Error deleting section image:', error);
+        if (section.image && Array.isArray(section.image)) {
+          for (const imageUrl of section.image) {
+            const sectionImagePath = path.join(UPLOAD_DIR, imageUrl.split('/').pop());
+            if (fs.existsSync(sectionImagePath)) {
+              try {
+                fs.unlinkSync(sectionImagePath);
+              } catch (error) {
+                console.error('Error deleting section image:', error);
+              }
             }
           }
         }
