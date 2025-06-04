@@ -8,14 +8,22 @@ const QASchema = new mongoose.Schema({
 const faqSchema = new mongoose.Schema({
     title: { type: String, required: true },
     questions: [QASchema],
-    relatedServices: {
+    // relatedServices: {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'Service'
+    // },
+    // relatedIndustries: {
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'Industry'
+    // },
+    relatedProducts: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service'
-    },
-    relatedIndustries: {
+        ref: 'Product'
+      }],
+      relatedChikfdServices: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Industry'
-    }
+        ref: 'ChildService'
+      }],
 }, { timestamps: true });
 
 const Faq = mongoose.models.Faq || mongoose.model("Faq", faqSchema);

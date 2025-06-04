@@ -774,8 +774,7 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
 });
 
 
-router.use("/knowledgebase/create", express.json())
-router.post("/knowledgebase/create", async (req, res) => {
+router.post("/knowledgebase/create", upload.single("Image"), async (req, res) => {
   try {
     const {
       title,
@@ -783,18 +782,23 @@ router.post("/knowledgebase/create", async (req, res) => {
       mainSections,
       conclusion,
       tags,
-      relatedService,
+      relatedServices,
       relatedIndustries,
+      relatedProducts,
+      relatedChikfdServices,
       status = 'draft'
     } = req.body;
+
     // Check required fields
-    // console.log(req.body)
-    if (!title || !introduction || !conclusion || !mainSections) {
+    if (!title || !introduction || !conclusion || !mainSections || !req.file) {
       return res.status(400).json({
         success: false,
-        message: "Required fields are missing"
+        message: "Required fields are missing (title, introduction, conclusion, mainSections, and image)"
       });
     }
+
+    // Get image URL
+    const imageUrl = getImageUrl(req.file.filename);
 
     // Parse mainSections if it's sent as a string
     let parsedMainSections;
@@ -802,7 +806,33 @@ router.post("/knowledgebase/create", async (req, res) => {
       parsedMainSections = typeof mainSections === 'string'
         ? JSON.parse(mainSections)
         : mainSections;
+        
+      // Validate mainSections structure
+      for (const section of parsedMainSections) {
+        if (!section.title || !section.content) {
+          return res.status(400).json({
+            success: false,
+            message: "Each section must have a title and content"
+          });
+        }
+        
+        // Make sure points is an array even if empty
+        if (!section.points) {
+          section.points = [];
+        } else if (section.points.length > 0) {
+          // Validate points structure
+          for (const point of section.points) {
+            if (!point.title || !point.description) {
+              return res.status(400).json({
+                success: false,
+                message: "Each point must have a title and description"
+              });
+            }
+          }
+        }
+      }
     } catch (error) {
+      console.error("Error parsing mainSections:", error);
       return res.status(400).json({
         success: false,
         message: "Invalid mainSections format"
@@ -810,40 +840,58 @@ router.post("/knowledgebase/create", async (req, res) => {
     }
 
     // Parse tags if they're sent as a string
-    const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+    const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags || [];
+    
+    // Parse related items
+    const parsedRelatedServices = typeof relatedServices === 'string' 
+      ? JSON.parse(relatedServices) 
+      : relatedServices || [];
+      
+    const parsedRelatedIndustries = typeof relatedIndustries === 'string' 
+      ? JSON.parse(relatedIndustries) 
+      : relatedIndustries || [];
+      
+    const parsedRelatedProducts = typeof relatedProducts === 'string' 
+      ? JSON.parse(relatedProducts) 
+      : relatedProducts || [];
+      
+    const parsedRelatedChikfdServices = typeof relatedChikfdServices === 'string' 
+      ? JSON.parse(relatedChikfdServices) 
+      : relatedChikfdServices || [];
 
     const newArticle = new KnowledgeBase({
       title,
+      Image: imageUrl,
       introduction,
       mainSections: parsedMainSections,
       conclusion,
-      tags: parsedTags || [],
-      relatedServices: relatedService,
-      relatedIndustries: relatedIndustries || [],
+      tags: parsedTags,
+      relatedServices: parsedRelatedServices,
+      relatedIndustries: parsedRelatedIndustries,
+      relatedProducts: parsedRelatedProducts,
+      relatedChikfdServices: parsedRelatedChikfdServices,
       status
     });
 
     await newArticle.save();
-    // console.log(newArticle)
 
     return res.status(201).json({
       success: true,
       message: "Knowledge base article created successfully",
-      KnowledgeBase: newArticle
+      knowledgeBase: newArticle
     });
 
   } catch (error) {
     console.error("Error creating knowledge base article:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error",
+      error: error.message
     });
   }
 });
 
-
-router.use("/knowledgebase/edit", express.json())
-router.post("/knowledgebase/edit", async (req, res) => {
+router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
   try {
     const {
       articleId,
@@ -854,6 +902,8 @@ router.post("/knowledgebase/edit", async (req, res) => {
       tags,
       relatedServices,
       relatedIndustries,
+      relatedProducts,
+      relatedChikfdServices,
       status
     } = req.body;
 
@@ -873,14 +923,58 @@ router.post("/knowledgebase/edit", async (req, res) => {
       });
     }
 
-    // Parse mainSections if it's sent as a string
+    // Handle image update
+    if (req.file) {
+      // If there's an existing image, delete it
+      if (article.Image) {
+        const oldImagePath = path.join(process.cwd(), 'public', article.Image.split('/').pop());
+        try {
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        } catch (err) {
+          console.error('Error deleting old article image:', err);
+        }
+      }
+      // Set new image URL
+      article.Image = getImageUrl(req.file.filename);
+    }
+
+    // Parse mainSections if provided
     if (mainSections) {
       try {
         const parsedMainSections = typeof mainSections === 'string'
           ? JSON.parse(mainSections)
           : mainSections;
+        
+        // Validate mainSections structure
+        for (const section of parsedMainSections) {
+          if (!section.title || !section.content) {
+            return res.status(400).json({
+              success: false,
+              message: "Each section must have a title and content"
+            });
+          }
+          
+          // Make sure points is an array even if empty
+          if (!section.points) {
+            section.points = [];
+          } else if (section.points.length > 0) {
+            // Validate points structure
+            for (const point of section.points) {
+              if (!point.title || !point.description) {
+                return res.status(400).json({
+                  success: false,
+                  message: "Each point must have a title and description"
+                });
+              }
+            }
+          }
+        }
+        
         article.mainSections = parsedMainSections;
       } catch (error) {
+        console.error("Error parsing mainSections:", error);
         return res.status(400).json({
           success: false,
           message: "Invalid mainSections format"
@@ -888,7 +982,7 @@ router.post("/knowledgebase/edit", async (req, res) => {
       }
     }
 
-    // Parse tags if they're sent as a string
+    // Parse tags if provided
     if (tags) {
       const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
       article.tags = parsedTags;
@@ -898,8 +992,36 @@ router.post("/knowledgebase/edit", async (req, res) => {
     if (title) article.title = title;
     if (introduction) article.introduction = introduction;
     if (conclusion) article.conclusion = conclusion;
-    if (relatedServices) article.relatedServices = relatedServices;
-    if (relatedIndustries) article.relatedIndustries = relatedIndustries;
+    
+    // Parse and update related items
+    if (relatedServices) {
+      const parsedRelatedServices = typeof relatedServices === 'string' 
+        ? JSON.parse(relatedServices) 
+        : relatedServices;
+      article.relatedServices = parsedRelatedServices;
+    }
+    
+    if (relatedIndustries) {
+      const parsedRelatedIndustries = typeof relatedIndustries === 'string' 
+        ? JSON.parse(relatedIndustries) 
+        : relatedIndustries;
+      article.relatedIndustries = parsedRelatedIndustries;
+    }
+    
+    if (relatedProducts) {
+      const parsedRelatedProducts = typeof relatedProducts === 'string' 
+        ? JSON.parse(relatedProducts) 
+        : relatedProducts;
+      article.relatedProducts = parsedRelatedProducts;
+    }
+    
+    if (relatedChikfdServices) {
+      const parsedRelatedChikfdServices = typeof relatedChikfdServices === 'string' 
+        ? JSON.parse(relatedChikfdServices) 
+        : relatedChikfdServices;
+      article.relatedChikfdServices = parsedRelatedChikfdServices;
+    }
+    
     if (status) article.status = status;
 
     await article.save();
@@ -914,11 +1036,11 @@ router.post("/knowledgebase/edit", async (req, res) => {
     console.error("Error updating knowledge base article:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error",
+      error: error.message
     });
   }
 });
-
 
 router.use("/faq/create", express.json())
 router.post("/faq/create", async (req, res) => {
@@ -926,8 +1048,8 @@ router.post("/faq/create", async (req, res) => {
     const {
       title,
       questions,
-      relatedServices,
-      relatedIndustries
+      relatedProducts,
+      relatedChikfdServices
     } = req.body;
 
     // Check required fields
@@ -948,12 +1070,21 @@ router.post("/faq/create", async (req, res) => {
       }
     }
 
+    // Parse related items if they're sent as strings
+    const parsedRelatedProducts = typeof relatedProducts === 'string' 
+      ? JSON.parse(relatedProducts) 
+      : relatedProducts || [];
+      
+    const parsedRelatedChikfdServices = typeof relatedChikfdServices === 'string' 
+      ? JSON.parse(relatedChikfdServices) 
+      : relatedChikfdServices || [];
+
     // Create new FAQ
     const newFaq = new Faq({
       title,
       questions,
-      relatedServices: relatedServices || null,
-      relatedIndustries: relatedIndustries || null
+      relatedProducts: parsedRelatedProducts,
+      relatedChikfdServices: parsedRelatedChikfdServices
     });
 
     await newFaq.save();
@@ -968,7 +1099,8 @@ router.post("/faq/create", async (req, res) => {
     console.error("Error creating FAQ:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error",
+      error: error.message
     });
   }
 });
