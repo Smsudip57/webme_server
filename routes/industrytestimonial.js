@@ -34,6 +34,183 @@ const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
 
 router.post(
+  "/testimonial/create",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        Testimonial: TestimonialText,
+        postedBy,
+        role,
+        relatedService,
+        relatedIndustries,
+        relatedProduct,
+        relatedChikfdServices
+      } = req.body;
+
+      if (
+        !TestimonialText ||
+        !postedBy ||
+        !role ||
+        !req.files.image ||
+        !req.files.video
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "All information are required.",
+        });
+      }
+
+      const imageUrl = getFileUrl(req.files.image[0].filename);
+      const videoUrl = getFileUrl(req.files.video[0].filename);
+
+      try {
+        const newTestimonial = new Testimonial({
+          Testimonial: TestimonialText,
+          postedBy,
+          role,
+          relatedService,
+          relatedIndustries,
+          relatedProduct,
+          relatedChikfdServices,
+          image: imageUrl,
+          video: videoUrl,
+        });
+
+        await newTestimonial.save();
+
+        return res.status(201).json({
+          success: true,
+          message: "Testimonial created successfully",
+          testimonial: newTestimonial,
+        });
+      } catch (dbError) {
+        console.error("Error saving to database:", dbError);
+
+        // Delete files if database save fails
+        if (req.files.image)
+          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
+        if (req.files.video)
+          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
+
+        return res.status(500).json({
+          success: false,
+          message: "Error saving testimonial data. Files deleted.",
+        });
+      }
+    } catch (error) {
+      console.error("Unexpected error:", error);
+
+      // Delete files if any other error occurs
+      if (req.files.image)
+        fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
+      if (req.files.video)
+        fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
+
+      return res.status(500).json({
+        success: false,
+        message: "Unexpected error occurred while creating testimonial.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/testimonial/edit",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        testimonialId,
+        Testimonial: TestimonialText,
+        postedBy,
+        role,
+        relatedService,
+        relatedIndustries,
+        relatedProduct,
+        relatedChikfdServices
+      } = req.body;
+
+      if (!testimonialId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Testimonial ID is required." });
+      }
+
+      // Find the testimonial
+      const testimonial = await Testimonial.findById(testimonialId);
+      if (!testimonial) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Testimonial not found." });
+      }
+
+      // Update fields
+      testimonial.Testimonial = TestimonialText || testimonial.Testimonial;
+      testimonial.postedBy = postedBy || testimonial.postedBy;
+      testimonial.role = role || testimonial.role;
+      
+      // Update relation fields if provided
+      if (relatedService) testimonial.relatedService = relatedService;
+      if (relatedIndustries) testimonial.relatedIndustries = relatedIndustries;
+      if (relatedProduct) testimonial.relatedProduct = relatedProduct;
+      if (relatedChikfdServices) testimonial.relatedChikfdServices = relatedChikfdServices;
+
+      // Handle image update if provided
+      if (req.files.image) {
+        if (testimonial.image) {
+          const oldImagePath = path.join(
+            UPLOAD_DIR,
+            testimonial.image.split("/").pop()
+          );
+          try {
+            if (fs.existsSync(oldImagePath)) fs.unlinkSync(oldImagePath);
+          } catch (err) {
+            console.error("Error deleting old image:", err);
+          }
+        }
+        testimonial.image = getFileUrl(req.files.image[0].filename);
+      }
+
+      // Handle video update if provided
+      if (req.files.video) {
+        if (testimonial.video) {
+          const oldVideoPath = path.join(
+            UPLOAD_DIR,
+            testimonial.video.split("/").pop()
+          );
+          try {
+            if (fs.existsSync(oldVideoPath)) fs.unlinkSync(oldVideoPath);
+          } catch (err) {
+            console.error("Error deleting old video:", err);
+          }
+        }
+        testimonial.video = getFileUrl(req.files.video[0].filename);
+      }
+
+      await testimonial.save();
+      return res.status(200).json({
+        success: true,
+        message: "Testimonial updated successfully.",
+        testimonial,
+      });
+    } catch (error) {
+      console.error("Error updating testimonial:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong. Please try again.",
+      });
+    }
+  }
+);
+
+router.post(
   "/industry/create",
   upload.fields([
     { name: "image", maxCount: 1 },
