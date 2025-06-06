@@ -225,7 +225,7 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
-        relatedProduct
+        relatedService
       } = req.body;
 
       const files = req.files; // Access uploaded files
@@ -241,29 +241,29 @@ router.post(
       const imageUrl = getImageUrl(image.filename);
       const logoUrl = getImageUrl(logo.filename);
 
-      // Process relatedProduct as array
-      let relatedProductArray = [];
-      if (relatedProduct) {
+      // Process relatedService as array
+      let relatedServiceArray = [];
+      if (relatedService) {
         // If it's a string that could be JSON
-        if (typeof relatedProduct === 'string' && relatedProduct.startsWith('[')) {
+        if (typeof relatedService === 'string' && relatedService.startsWith('[')) {
           try {
-            relatedProductArray = JSON.parse(relatedProduct);
+            relatedServiceArray = JSON.parse(relatedService);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+            relatedServiceArray = relatedService.split(',').map(id => id.trim());
           }
         } 
         // If it's a comma-separated string
-        else if (typeof relatedProduct === 'string') {
-          relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+        else if (typeof relatedService === 'string') {
+          relatedServiceArray = relatedService.split(',').map(id => id.trim());
         }
         // If it's already an array (from middleware)
-        else if (Array.isArray(relatedProduct)) {
-          relatedProductArray = relatedProduct;
+        else if (Array.isArray(relatedService)) {
+          relatedServiceArray = relatedService;
         }
         // If it's a single ID
         else {
-          relatedProductArray = [relatedProduct];
+          relatedServiceArray = [relatedService];
         }
       }
 
@@ -276,7 +276,7 @@ router.post(
         customerSatisfaction: Number(customerSatisfaction) || 0,
         image: imageUrl,
         logo: logoUrl,
-        relatedProduct: relatedProductArray
+        relatedService: relatedServiceArray
       });
 
       await newIndustry.save();
@@ -312,7 +312,7 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
-        relatedProduct
+        relatedService
       } = req.body;
 
       if (!id || !Title || !Heading || !detail) {
@@ -375,29 +375,29 @@ router.post(
         }
       }
 
-      // Process relatedProduct as array
-      let relatedProductArray = industry.relatedProduct || []; // Default to existing array
-      if (relatedProduct) {
+      // Process relatedService as array
+      let relatedServiceArray = industry.relatedService || []; // Default to existing array
+      if (relatedService) {
         // If it's a string that could be JSON
-        if (typeof relatedProduct === 'string' && relatedProduct.startsWith('[')) {
+        if (typeof relatedService === 'string' && relatedService.startsWith('[')) {
           try {
-            relatedProductArray = JSON.parse(relatedProduct);
+            relatedServiceArray = JSON.parse(relatedService);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+            relatedServiceArray = relatedService.split(',').map(id => id.trim());
           }
         } 
         // If it's a comma-separated string
-        else if (typeof relatedProduct === 'string') {
-          relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+        else if (typeof relatedService === 'string') {
+          relatedServiceArray = relatedService.split(',').map(id => id.trim());
         }
         // If it's already an array (from middleware)
-        else if (Array.isArray(relatedProduct)) {
-          relatedProductArray = relatedProduct;
+        else if (Array.isArray(relatedService)) {
+          relatedServiceArray = relatedService;
         }
         // If it's a single ID
         else {
-          relatedProductArray = [relatedProduct];
+          relatedServiceArray = [relatedService];
         }
       }
 
@@ -405,14 +405,14 @@ router.post(
       industry.Title = Title;
       industry.Heading = Heading;
       industry.detail = detail;
-      if (Efficiency) industry.Efficiency = Number(Efficiency);
-      if (costSaving) industry.costSaving = Number(costSaving);
-      if (customerSatisfaction)
+      if (Efficiency !== undefined) industry.Efficiency = Number(Efficiency);
+      if (costSaving !== undefined) industry.costSaving = Number(costSaving);
+      if (customerSatisfaction !== undefined)
         industry.customerSatisfaction = Number(customerSatisfaction);
       industry.image = imageUrl;
       industry.logo = logoUrl;
-      // Update relatedProduct if provided
-      industry.relatedProduct = relatedProductArray;
+      // Update relatedService if provided
+      industry.relatedService = relatedServiceArray;
 
       await industry.save();
 
