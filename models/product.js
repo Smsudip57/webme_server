@@ -32,6 +32,7 @@ const sectionsSchema = new mongoose.Schema({
             message: props => `${props.value} is not a valid image path or URL`
         }
     },
+    
     points: {
         type: [pointsSchema],
         validate: {
@@ -55,6 +56,19 @@ const productSchema = new mongoose.Schema(
       required: [true, 'Detail is required'],
       trim: true,
     },
+     slug:{
+          type: String,
+          required: [true, 'Slug is required'],
+          unique: true,
+          trim: true,
+          lowercase: true,
+          validate: {
+            validator: function (v) {
+              return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v);
+            },
+            message: props => `${props.value} is not a valid slug format`
+          }
+        },
     moreDetail: {
       type: String,
       required: [true, 'Detail is required'],

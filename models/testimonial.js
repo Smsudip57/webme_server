@@ -31,9 +31,9 @@ const testimonialSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Industry'
     },
-    relatedUser:{
+    relatedProduct:{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        ref: 'Product'
     }
 }
 );

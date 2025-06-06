@@ -1041,13 +1041,15 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
     });
   }
 });
-
+// CREATE FAQ
 router.use("/faq/create", express.json())
 router.post("/faq/create", async (req, res) => {
   try {
     const {
       title,
       questions,
+      relatedServices,
+      relatedIndustries,
       relatedProducts,
       relatedChikfdServices
     } = req.body;
@@ -1070,21 +1072,20 @@ router.post("/faq/create", async (req, res) => {
       }
     }
 
-    // Parse related items if they're sent as strings
-    const parsedRelatedProducts = typeof relatedProducts === 'string' 
-      ? JSON.parse(relatedProducts) 
-      : relatedProducts || [];
-      
-    const parsedRelatedChikfdServices = typeof relatedChikfdServices === 'string' 
-      ? JSON.parse(relatedChikfdServices) 
-      : relatedChikfdServices || [];
+    // Ensure all related fields are arrays
+    const parsedRelatedServices = ensureArray(relatedServices);
+    const parsedRelatedIndustries = ensureArray(relatedIndustries);
+    const parsedRelatedProducts = ensureArray(relatedProducts);
+    const parsedRelatedChildServices = ensureArray(relatedChikfdServices);
 
-    // Create new FAQ
+    // Create new FAQ with all related items as arrays
     const newFaq = new Faq({
       title,
       questions,
+      relatedServices: parsedRelatedServices,
+      relatedIndustries: parsedRelatedIndustries,
       relatedProducts: parsedRelatedProducts,
-      relatedChikfdServices: parsedRelatedChikfdServices
+      relatedChikfdServices: parsedRelatedChildServices
     });
 
     await newFaq.save();
@@ -1105,32 +1106,145 @@ router.post("/faq/create", async (req, res) => {
   }
 });
 
+// UPDATE FAQ
+router.use("/faq/edit", express.json())
+router.post("/faq/edit", async (req, res) => {
+  try {
+    const {
+      faqId,
+      title,
+      questions,
+      relatedServices,
+      relatedIndustries,
+      relatedProducts,
+      relatedChikfdServices
+    } = req.body;
 
-
-const nstorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'public/'); 
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const fileExt = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + fileExt);
-  }
-});
-
-
-const nupload = multer({ 
-  storage: nstorage,
-  fileFilter: function (req, file, cb) {
-    // Accept images only
-    if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
-      return cb(new Error('Only image files are allowed!'), false);
+    // Check if FAQ exists
+    if (!faqId) {
+      return res.status(400).json({
+        success: false,
+        message: "FAQ ID is required"
+      });
     }
-    cb(null, true);
+
+    const faq = await Faq.findById(faqId);
+    if (!faq) {
+      return res.status(404).json({
+        success: false,
+        message: "FAQ not found"
+      });
+    }
+
+    // Update fields if provided
+    if (title) faq.title = title;
+    
+    if (questions && Array.isArray(questions)) {
+      // Validate questions format
+      for (const qa of questions) {
+        if (!qa.question || !qa.answer) {
+          return res.status(400).json({
+            success: false,
+            message: "Each question must have both question and answer fields"
+          });
+        }
+      }
+      faq.questions = questions;
+    }
+
+    // Update relations if provided, ensuring they're arrays
+    if (relatedServices !== undefined) {
+      faq.relatedServices = ensureArray(relatedServices);
+    }
+    
+    if (relatedIndustries !== undefined) {
+      faq.relatedIndustries = ensureArray(relatedIndustries);
+    }
+    
+    if (relatedProducts !== undefined) {
+      faq.relatedProducts = ensureArray(relatedProducts);
+    }
+    
+    if (relatedChikfdServices !== undefined) {
+      faq.relatedChikfdServices = ensureArray(relatedChikfdServices);
+    }
+
+    await faq.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "FAQ updated successfully",
+      faq
+    });
+  } catch (error) {
+    console.error("Error updating FAQ:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
   }
 });
 
-router.post('/servicedetails/create', nupload.array('images'), async (req, res) => {
+// Helper function to ensure a value is an array
+function ensureArray(value) {
+  if (!value) return [];
+  
+  // If it's already an array, return it
+  if (Array.isArray(value)) return value;
+  
+  // If it's a string that looks like JSON, try to parse it
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [value];
+    } catch (e) {
+      // If parsing fails, treat it as a single value
+      return [value];
+    }
+  }
+  
+  // For any other type, wrap it in an array
+  return [value];
+}
+// DELETE FAQ
+router.use("/faq/delete", express.json())
+router.post("/faq/delete", async (req, res) => {
+  try {
+    const { faqId } = req.body;
+
+    if (!faqId) {
+      return res.status(400).json({
+        success: false,
+        message: "FAQ ID is required"
+      });
+    }
+
+    const faq = await Faq.findById(faqId);
+    if (!faq) {
+      return res.status(404).json({
+        success: false,
+        message: "FAQ not found"
+      });
+    }
+
+    await faq.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "FAQ deleted successfully"
+    });
+  } catch (error) {
+    console.error("Error deleting FAQ:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+});
+
+router.post('/servicedetails/create', upload.array('images'), async (req, res) => {
   try {
     const uploadedFiles = req.files.map(file =>
       `${process.env.CURRENT_URL}/public/${file.filename}`

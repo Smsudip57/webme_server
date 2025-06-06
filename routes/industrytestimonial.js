@@ -46,6 +46,7 @@ router.post(
         role,
         relatedService,
         relatedIndustries,
+        relatedProduct, // Added relatedProduct field
       } = req.body;
 
       if (
@@ -71,8 +72,9 @@ router.post(
           role,
           relatedService,
           relatedIndustries,
+          relatedProduct, // Include relatedProduct in the new testimonial
           image: imageUrl,
-          video: videoUrl, // ✅ Save video URL
+          video: videoUrl,
         });
 
         await newTestimonial.save();
@@ -128,6 +130,7 @@ router.post(
         role,
         relatedService,
         relatedIndustries,
+        relatedProduct, // Added relatedProduct field
       } = req.body;
 
       if (!testimonialId) {
@@ -151,6 +154,7 @@ router.post(
       testimonial.relatedService = relatedService || testimonial.relatedService;
       testimonial.relatedIndustries =
         relatedIndustries || testimonial.relatedIndustries;
+      testimonial.relatedProduct = relatedProduct || testimonial.relatedProduct; // Update relatedProduct
 
       // Handle image update if provided
       if (req.files.image) {
@@ -199,6 +203,8 @@ router.post(
     }
   }
 );
+
+
 
 router.post(
   "/industry/create",
@@ -418,11 +424,12 @@ router.delete("/industry/delete", async (req, res) => {
   }
 });
 
-router.post("/product/create", 
+router.post(
+  "/product/create",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 } // Adjust based on max sections you expect
-  ]), 
+    { name: "sectionImages", maxCount: 10 },
+  ]),
   async (req, res) => {
     try {
       // Extract basic product fields
@@ -431,20 +438,48 @@ router.post("/product/create",
         detail,
         moreDetail,
         category,
-        sections: sectionsJSON
+        slug,
+        sections: sectionsJSON,
       } = req.body;
 
       // Validate required fields
-      if (!Title || !detail || !moreDetail || !category || !sectionsJSON || !req.files.mainImage) {
+      if (
+        !Title ||
+        !detail ||
+        !moreDetail ||
+        !category ||
+        !slug ||
+        !sectionsJSON ||
+        !req.files.mainImage
+      ) {
         return res.status(400).json({
           success: false,
-          message: "All fields are required: Title, detail, moreDetail, category, sections, and mainImage"
+          message:
+            "All fields are required: Title, detail, moreDetail, category, slug, sections, and mainImage",
+        });
+      }
+
+      // Validate slug format
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Slug must be lowercase, containing only letters, numbers, and hyphens",
+        });
+      }
+
+      // Check if slug already exists
+      const existingProduct = await Product.findOne({ slug });
+      if (existingProduct) {
+        return res.status(400).json({
+          success: false,
+          message: "Slug already exists. Please use a unique slug.",
         });
       }
 
       // Get main image URL
       const mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
-      
+
       // Parse sections from JSON
       let sectionsData;
       try {
@@ -452,26 +487,32 @@ router.post("/product/create",
         if (!Array.isArray(sectionsData) || sectionsData.length === 0) {
           return res.status(400).json({
             success: false,
-            message: "Sections must be a non-empty array"
+            message: "Sections must be a non-empty array",
           });
         }
       } catch (error) {
         return res.status(400).json({
           success: false,
-          message: "Invalid sections JSON format"
+          message: "Invalid sections JSON format",
         });
       }
 
       // Process sections with uploaded images
       const sectionImages = req.files.sectionImages || [];
       let imageIndex = 0;
-      
-      const processedSections = sectionsData.map(section => {
+
+      const processedSections = sectionsData.map((section) => {
         // Validate section data
-        if (!section.title || !Array.isArray(section.points) || section.points.length === 0) {
-          throw new Error(`Section ${section.title || 'unknown'} is missing required fields`);
+        if (
+          !section.title ||
+          !Array.isArray(section.points) ||
+          section.points.length === 0
+        ) {
+          throw new Error(
+            `Section ${section.title || "unknown"} is missing required fields`
+          );
         }
-        
+
         // Use uploaded image if available, otherwise use URL from JSON
         let sectionImage;
         if (section.useUploadedImage && imageIndex < sectionImages.length) {
@@ -483,22 +524,24 @@ router.post("/product/create",
             throw new Error(`Image is required for section: ${section.title}`);
           }
         }
-        
+
         // Process points
-        const processedPoints = section.points.map(point => {
+        const processedPoints = section.points.map((point) => {
           if (!point.title || !point.detail) {
-            throw new Error(`Point in section ${section.title} is missing title or detail`);
+            throw new Error(
+              `Point in section ${section.title} is missing title or detail`
+            );
           }
           return {
             title: point.title,
-            detail: point.detail
+            detail: point.detail,
           };
         });
-        
+
         return {
           title: section.title,
           image: sectionImage,
-          points: processedPoints
+          points: processedPoints,
         };
       });
 
@@ -507,44 +550,45 @@ router.post("/product/create",
         Title,
         detail,
         moreDetail,
+        slug,
         image: mainImageUrl,
         category,
-        sections: processedSections
+        sections: processedSections,
       });
 
       // Save to database
       await newProduct.save();
-      
+
       return res.status(201).json({
         success: true,
         message: "Product created successfully",
-        product: newProduct
+        product: newProduct,
       });
-      
     } catch (error) {
       console.error("Error creating product:", error);
-      
+
       // Clean up uploaded files on error
       try {
         if (req.files.mainImage) {
           fs.unlinkSync(path.join(UPLOAD_DIR, req.files.mainImage[0].filename));
         }
         if (req.files.sectionImages) {
-          req.files.sectionImages.forEach(file => {
+          req.files.sectionImages.forEach((file) => {
             fs.unlinkSync(path.join(UPLOAD_DIR, file.filename));
           });
         }
       } catch (cleanupError) {
         console.error("Error cleaning up files:", cleanupError);
       }
-      
+
       return res.status(500).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again."
+        message: error.message || "Something went wrong. Please try again.",
       });
     }
   }
 );
+
 router.use("/product/delete", express.json());
 
 router.post("/product/delete", async (req, res) => {
@@ -552,17 +596,17 @@ router.post("/product/delete", async (req, res) => {
     const { productId } = req.body;
 
     if (!productId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Product ID is required" 
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
       });
     }
 
     const product = await Product.findById(productId);
     if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Product not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
       });
     }
 
@@ -595,24 +639,25 @@ router.post("/product/delete", async (req, res) => {
     }
     await Promise.allSettled(fileDeleteOperations);
     await Product.findByIdAndDelete(productId);
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      message: "Product and all associated images deleted successfully" 
+      message: "Product and all associated images deleted successfully",
     });
   } catch (err) {
     console.error("Error deleting product:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Failed to delete product" 
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete product",
     });
   }
 });
 
-router.put("/product/edit", 
+router.put(
+  "/product/edit",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 }
-  ]), 
+    { name: "sectionImages", maxCount: 10 },
+  ]),
   async (req, res) => {
     try {
       const {
@@ -621,15 +666,16 @@ router.put("/product/edit",
         detail,
         moreDetail,
         category,
+        slug,
         sections: sectionsJSON,
-        imagesToDelete 
+        imagesToDelete,
       } = req.body;
 
       // Validate product ID
       if (!productId) {
         return res.status(400).json({
           success: false,
-          message: "Product ID is required"
+          message: "Product ID is required",
         });
       }
 
@@ -638,8 +684,34 @@ router.put("/product/edit",
       if (!existingProduct) {
         return res.status(404).json({
           success: false,
-          message: "Product not found"
+          message: "Product not found",
         });
+      }
+
+      // Validate slug if provided
+      if (slug) {
+        // Validate slug format
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Slug must be lowercase, containing only letters, numbers, and hyphens",
+          });
+        }
+
+        // Check if slug already exists and belongs to a different product
+        if (existingProduct.slug !== slug) {
+          const slugExists = await Product.findOne({
+            slug,
+            _id: { $ne: productId },
+          });
+          if (slugExists) {
+            return res.status(400).json({
+              success: false,
+              message: "Slug already exists. Please use a unique slug.",
+            });
+          }
+        }
       }
 
       // Handle main image update
@@ -657,7 +729,7 @@ router.put("/product/edit",
         } catch (error) {
           console.error("Error deleting old main image:", error);
         }
-        
+
         // Set new image URL
         mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
       }
@@ -667,7 +739,7 @@ router.put("/product/edit",
       if (sectionsJSON) {
         try {
           const sectionsData = JSON.parse(sectionsJSON);
-          
+
           // Delete images that need to be removed
           if (imagesToDelete) {
             const imagesToRemove = JSON.parse(imagesToDelete);
@@ -689,27 +761,27 @@ router.put("/product/edit",
           // Process section images
           const sectionImages = req.files.sectionImages || [];
           let imageIndex = 0;
-          
-          updatedSections = sectionsData.map(section => {
+
+          updatedSections = sectionsData.map((section) => {
             // Use uploaded image if specified
             let sectionImage = section.image;
             if (section.useUploadedImage && imageIndex < sectionImages.length) {
               sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
             }
-            
+
             return {
               title: section.title,
               image: sectionImage,
-              points: section.points.map(point => ({
+              points: section.points.map((point) => ({
                 title: point.title,
-                detail: point.detail
-              }))
+                detail: point.detail,
+              })),
             };
           });
         } catch (error) {
           return res.status(400).json({
             success: false,
-            message: "Invalid sections data: " + error.message
+            message: "Invalid sections data: " + error.message,
           });
         }
       } else {
@@ -724,9 +796,10 @@ router.put("/product/edit",
           Title: Title || existingProduct.Title,
           detail: detail || existingProduct.detail,
           moreDetail: moreDetail || existingProduct.moreDetail,
+          slug: slug || existingProduct.slug,
           image: mainImageUrl,
           category: category || existingProduct.category,
-          sections: updatedSections
+          sections: updatedSections,
         },
         { new: true, runValidators: true }
       );
@@ -734,26 +807,24 @@ router.put("/product/edit",
       return res.status(200).json({
         success: true,
         message: "Product updated successfully",
-        product: updatedProduct
+        product: updatedProduct,
       });
-
     } catch (error) {
       console.error("Error updating product:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again."
+        message: error.message || "Something went wrong. Please try again.",
       });
     }
   }
 );
 
-
-
-router.post("/child/create", 
+router.post(
+  "/child/create",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 } // Adjust based on max sections you expect
-  ]), 
+    { name: "sectionImages", maxCount: 10 },
+  ]),
   async (req, res) => {
     try {
       // Extract basic product fields
@@ -762,20 +833,48 @@ router.post("/child/create",
         detail,
         moreDetail,
         category,
-        sections: sectionsJSON
+        slug,
+        sections: sectionsJSON,
       } = req.body;
 
       // Validate required fields
-      if (!Title || !detail || !moreDetail || !category || !sectionsJSON || !req.files.mainImage) {
+      if (
+        !Title ||
+        !detail ||
+        !moreDetail ||
+        !category ||
+        !slug ||
+        !sectionsJSON ||
+        !req.files.mainImage
+      ) {
         return res.status(400).json({
           success: false,
-          message: "All fields are required: Title, detail, moreDetail, category, sections, and mainImage"
+          message:
+            "All fields are required: Title, detail, moreDetail, category, slug, sections, and mainImage",
+        });
+      }
+
+      // Validate slug format
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Slug must be lowercase, containing only letters, numbers, and hyphens",
+        });
+      }
+
+      // Check if slug already exists
+      const existingChildService = await ChildService.findOne({ slug });
+      if (existingChildService) {
+        return res.status(400).json({
+          success: false,
+          message: "Slug already exists. Please use a unique slug.",
         });
       }
 
       // Get main image URL
       const mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
-      
+
       // Parse sections from JSON
       let sectionsData;
       try {
@@ -783,26 +882,32 @@ router.post("/child/create",
         if (!Array.isArray(sectionsData) || sectionsData.length === 0) {
           return res.status(400).json({
             success: false,
-            message: "Sections must be a non-empty array"
+            message: "Sections must be a non-empty array",
           });
         }
       } catch (error) {
         return res.status(400).json({
           success: false,
-          message: "Invalid sections JSON format"
+          message: "Invalid sections JSON format",
         });
       }
 
       // Process sections with uploaded images
       const sectionImages = req.files.sectionImages || [];
       let imageIndex = 0;
-      
-      const processedSections = sectionsData.map(section => {
+
+      const processedSections = sectionsData.map((section) => {
         // Validate section data
-        if (!section.title || !Array.isArray(section.points) || section.points.length === 0) {
-          throw new Error(`Section ${section.title || 'unknown'} is missing required fields`);
+        if (
+          !section.title ||
+          !Array.isArray(section.points) ||
+          section.points.length === 0
+        ) {
+          throw new Error(
+            `Section ${section.title || "unknown"} is missing required fields`
+          );
         }
-        
+
         // Use uploaded image if available, otherwise use URL from JSON
         let sectionImage;
         if (section.useUploadedImage && imageIndex < sectionImages.length) {
@@ -814,64 +919,66 @@ router.post("/child/create",
             throw new Error(`Image is required for section: ${section.title}`);
           }
         }
-        
+
         // Process points
-        const processedPoints = section.points.map(point => {
+        const processedPoints = section.points.map((point) => {
           if (!point.title || !point.detail) {
-            throw new Error(`Point in section ${section.title} is missing title or detail`);
+            throw new Error(
+              `Point in section ${section.title} is missing title or detail`
+            );
           }
           return {
             title: point.title,
-            detail: point.detail
+            detail: point.detail,
           };
         });
-        
+
         return {
           title: section.title,
           image: sectionImage,
-          points: processedPoints
+          points: processedPoints,
         };
       });
 
-      // Create product with processed data
-      const newProduct = new ChildService({
+      // Create child service with processed data
+      const newChildService = new ChildService({
         Title,
         detail,
         moreDetail,
+        slug,
         image: mainImageUrl,
         category,
-        sections: processedSections
+        sections: processedSections,
       });
 
       // Save to database
-      await newProduct.save();
-      
+      await newChildService.save();
+
       return res.status(201).json({
         success: true,
-        message: "Product created successfully",
-        product: newProduct
+        message: "Child service created successfully",
+        product: newChildService,
       });
-      
     } catch (error) {
-      console.error("Error creating product:", error);
-      
+      console.error("Error creating child service:", error);
+
       // Clean up uploaded files on error
       try {
         if (req.files.mainImage) {
           fs.unlinkSync(path.join(UPLOAD_DIR, req.files.mainImage[0].filename));
         }
         if (req.files.sectionImages) {
-          req.files.sectionImages.forEach(file => {
+          req.files.sectionImages.forEach((file) => {
             fs.unlinkSync(path.join(UPLOAD_DIR, file.filename));
           });
         }
       } catch (cleanupError) {
         console.error("Error cleaning up files:", cleanupError);
       }
-      
+
       return res.status(500).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again."
+        message: error.message || "Something went wrong. Please try again.",
       });
     }
   }
@@ -883,17 +990,17 @@ router.post("/child/delete", async (req, res) => {
     const { productId } = req.body;
 
     if (!productId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Product ID is required" 
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
       });
     }
 
     const product = await ChildService.findById(productId);
     if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Product not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
       });
     }
 
@@ -935,24 +1042,25 @@ router.post("/child/delete", async (req, res) => {
     await ChildService.findByIdAndDelete(productId);
 
     // Return success response
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      message: "Child service and all associated images deleted successfully" 
+      message: "Child service and all associated images deleted successfully",
     });
   } catch (err) {
     console.error("Error deleting child service:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Failed to delete child service" 
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete child service",
     });
   }
 });
 
-router.put("/child/edit", 
+router.put(
+  "/child/edit",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 }
-  ]), 
+    { name: "sectionImages", maxCount: 10 },
+  ]),
   async (req, res) => {
     try {
       // Extract fields from request
@@ -962,35 +1070,62 @@ router.put("/child/edit",
         detail,
         moreDetail,
         category,
+        slug,
         sections: sectionsJSON,
-        imagesToDelete // JSON array of image paths to delete
+        imagesToDelete,
       } = req.body;
 
       // Validate product ID
       if (!productId) {
         return res.status(400).json({
           success: false,
-          message: "Product ID is required"
+          message: "Product ID is required",
         });
       }
 
-      // Find existing product
-      const existingProduct = await ChildService.findById(productId);
-      if (!existingProduct) {
+      // Find existing child service
+      const existingChildService = await ChildService.findById(productId);
+      if (!existingChildService) {
         return res.status(404).json({
           success: false,
-          message: "Product not found"
+          message: "Child service not found",
         });
+      }
+
+      // Validate slug if provided
+      if (slug) {
+        // Validate slug format
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Slug must be lowercase, containing only letters, numbers, and hyphens",
+          });
+        }
+
+        // Check if slug already exists and belongs to a different child service
+        if (existingChildService.slug !== slug) {
+          const slugExists = await ChildService.findOne({
+            slug,
+            _id: { $ne: productId },
+          });
+          if (slugExists) {
+            return res.status(400).json({
+              success: false,
+              message: "Slug already exists. Please use a unique slug.",
+            });
+          }
+        }
       }
 
       // Handle main image update
-      let mainImageUrl = existingProduct.image;
+      let mainImageUrl = existingChildService.image;
       if (req.files.mainImage) {
         // Delete old image if it exists
         try {
           const oldImagePath = path.join(
             UPLOAD_DIR,
-            existingProduct.image.split("/").pop()
+            existingChildService.image.split("/").pop()
           );
           if (fs.existsSync(oldImagePath)) {
             fs.unlinkSync(oldImagePath);
@@ -998,7 +1133,7 @@ router.put("/child/edit",
         } catch (error) {
           console.error("Error deleting old main image:", error);
         }
-        
+
         // Set new image URL
         mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
       }
@@ -1008,7 +1143,7 @@ router.put("/child/edit",
       if (sectionsJSON) {
         try {
           const sectionsData = JSON.parse(sectionsJSON);
-          
+
           // Delete images that need to be removed
           if (imagesToDelete) {
             const imagesToRemove = JSON.parse(imagesToDelete);
@@ -1030,65 +1165,62 @@ router.put("/child/edit",
           // Process section images
           const sectionImages = req.files.sectionImages || [];
           let imageIndex = 0;
-          
-          updatedSections = sectionsData.map(section => {
+
+          updatedSections = sectionsData.map((section) => {
             // Use uploaded image if specified
             let sectionImage = section.image;
             if (section.useUploadedImage && imageIndex < sectionImages.length) {
               sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
             }
-            
+
             return {
               title: section.title,
               image: sectionImage,
-              points: section.points.map(point => ({
+              points: section.points.map((point) => ({
                 title: point.title,
-                detail: point.detail
-              }))
+                detail: point.detail,
+              })),
             };
           });
         } catch (error) {
           return res.status(400).json({
             success: false,
-            message: "Invalid sections data: " + error.message
+            message: "Invalid sections data: " + error.message,
           });
         }
       } else {
         // Keep existing sections if none provided
-        updatedSections = existingProduct.sections;
+        updatedSections = existingChildService.sections;
       }
 
-      // Update product with all fields
-      const updatedProduct = await ChildService.findByIdAndUpdate(
+      // Update child service with all fields
+      const updatedChildService = await ChildService.findByIdAndUpdate(
         productId,
         {
-          Title: Title || existingProduct.Title,
-          detail: detail || existingProduct.detail,
-          moreDetail: moreDetail || existingProduct.moreDetail,
+          Title: Title || existingChildService.Title,
+          detail: detail || existingChildService.detail,
+          moreDetail: moreDetail || existingChildService.moreDetail,
+          slug: slug || existingChildService.slug,
           image: mainImageUrl,
-          category: category || existingProduct.category,
-          sections: updatedSections
+          category: category || existingChildService.category,
+          sections: updatedSections,
         },
         { new: true, runValidators: true }
       );
 
       return res.status(200).json({
         success: true,
-        message: "Product updated successfully",
-        product: updatedProduct
+        message: "Child service updated successfully",
+        product: updatedChildService,
       });
-
     } catch (error) {
-      console.error("Error updating product:", error);
+      console.error("Error updating child service:", error);
       return res.status(500).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again."
+        message: error.message || "Something went wrong. Please try again.",
       });
     }
   }
 );
-
-
-
 
 module.exports = router;
