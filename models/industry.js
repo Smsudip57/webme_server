@@ -31,6 +31,10 @@ const industrySchema = new mongoose.Schema(
     costSaving:{
         type: Number
     },
+    relatedProduct:[{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Product'
+        }],
     customerSatisfaction:{
         type: Number
     },

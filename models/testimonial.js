@@ -34,7 +34,11 @@ const testimonialSchema = new mongoose.Schema(
     relatedProduct:{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Product'
-    }
+    },
+    relatedChikfdServices: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'ChildService'
+          },
 }
 );
 

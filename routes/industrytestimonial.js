@@ -32,179 +32,6 @@ const upload = multer({ storage });
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
-router.post(
-  "/testimonial/create",
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
-  async (req, res) => {
-    try {
-      const {
-        Testimonial: TestimonialText,
-        postedBy,
-        role,
-        relatedService,
-        relatedIndustries,
-        relatedProduct, // Added relatedProduct field
-      } = req.body;
-
-      if (
-        !TestimonialText ||
-        !postedBy ||
-        !role ||
-        !req.files.image ||
-        !req.files.video
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "All information are required.",
-        });
-      }
-
-      const imageUrl = getFileUrl(req.files.image[0].filename);
-      const videoUrl = getFileUrl(req.files.video[0].filename);
-
-      try {
-        const newTestimonial = new Testimonial({
-          Testimonial: TestimonialText,
-          postedBy,
-          role,
-          relatedService,
-          relatedIndustries,
-          relatedProduct, // Include relatedProduct in the new testimonial
-          image: imageUrl,
-          video: videoUrl,
-        });
-
-        await newTestimonial.save();
-
-        return res.status(201).json({
-          success: true,
-          message: "Testimonial created successfully",
-          testimonial: newTestimonial,
-        });
-      } catch (dbError) {
-        console.error("Error saving to database:", dbError);
-
-        // Delete files if database save fails
-        if (req.files.image)
-          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
-        if (req.files.video)
-          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
-
-        return res.status(500).json({
-          success: false,
-          message: "Error saving testimonial data. Files deleted.",
-        });
-      }
-    } catch (error) {
-      console.error("Unexpected error:", error);
-
-      // Delete files if any other error occurs
-      if (req.files.image)
-        fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
-      if (req.files.video)
-        fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
-
-      return res.status(500).json({
-        success: false,
-        message: "Unexpected error occurred while creating testimonial.",
-      });
-    }
-  }
-);
-
-router.post(
-  "/testimonial/edit",
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
-  async (req, res) => {
-    try {
-      const {
-        testimonialId,
-        Testimonial: TestimonialText,
-        postedBy,
-        role,
-        relatedService,
-        relatedIndustries,
-        relatedProduct, // Added relatedProduct field
-      } = req.body;
-
-      if (!testimonialId) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Testimonial ID is required." });
-      }
-
-      // Find the testimonial
-      const testimonial = await Testimonial.findById(testimonialId);
-      if (!testimonial) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Testimonial not found." });
-      }
-
-      // Update fields
-      testimonial.Testimonial = TestimonialText || testimonial.Testimonial;
-      testimonial.postedBy = postedBy || testimonial.postedBy;
-      testimonial.role = role || testimonial.role;
-      testimonial.relatedService = relatedService || testimonial.relatedService;
-      testimonial.relatedIndustries =
-        relatedIndustries || testimonial.relatedIndustries;
-      testimonial.relatedProduct = relatedProduct || testimonial.relatedProduct; // Update relatedProduct
-
-      // Handle image update if provided
-      if (req.files.image) {
-        if (testimonial.image) {
-          const oldImagePath = path.join(
-            UPLOAD_DIR,
-            testimonial.image.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(oldImagePath)) fs.unlinkSync(oldImagePath);
-          } catch (err) {
-            console.error("Error deleting old image:", err);
-          }
-        }
-        testimonial.image = getFileUrl(req.files.image[0].filename);
-      }
-
-      // Handle video update if provided
-      if (req.files.video) {
-        if (testimonial.video) {
-          const oldVideoPath = path.join(
-            UPLOAD_DIR,
-            testimonial.video.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(oldVideoPath)) fs.unlinkSync(oldVideoPath);
-          } catch (err) {
-            console.error("Error deleting old video:", err);
-          }
-        }
-        testimonial.video = getFileUrl(req.files.video[0].filename);
-      }
-
-      await testimonial.save();
-      return res.status(200).json({
-        success: true,
-        message: "Testimonial updated successfully.",
-        testimonial,
-      });
-    } catch (error) {
-      console.error("Error updating testimonial:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Something went wrong. Please try again.",
-      });
-    }
-  }
-);
-
-
 
 router.post(
   "/industry/create",
@@ -221,6 +48,7 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
+        relatedProduct
       } = req.body;
 
       const files = req.files; // Access uploaded files
@@ -236,6 +64,32 @@ router.post(
       const imageUrl = getImageUrl(image.filename);
       const logoUrl = getImageUrl(logo.filename);
 
+      // Process relatedProduct as array
+      let relatedProductArray = [];
+      if (relatedProduct) {
+        // If it's a string that could be JSON
+        if (typeof relatedProduct === 'string' && relatedProduct.startsWith('[')) {
+          try {
+            relatedProductArray = JSON.parse(relatedProduct);
+          } catch (e) {
+            // If JSON parsing fails, treat as comma-separated string
+            relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+          }
+        } 
+        // If it's a comma-separated string
+        else if (typeof relatedProduct === 'string') {
+          relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+        }
+        // If it's already an array (from middleware)
+        else if (Array.isArray(relatedProduct)) {
+          relatedProductArray = relatedProduct;
+        }
+        // If it's a single ID
+        else {
+          relatedProductArray = [relatedProduct];
+        }
+      }
+
       const newIndustry = new Industry({
         Title,
         Heading,
@@ -245,6 +99,7 @@ router.post(
         customerSatisfaction: Number(customerSatisfaction) || 0,
         image: imageUrl,
         logo: logoUrl,
+        relatedProduct: relatedProductArray
       });
 
       await newIndustry.save();
@@ -280,6 +135,7 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
+        relatedProduct
       } = req.body;
 
       if (!id || !Title || !Heading || !detail) {
@@ -342,6 +198,32 @@ router.post(
         }
       }
 
+      // Process relatedProduct as array
+      let relatedProductArray = industry.relatedProduct || []; // Default to existing array
+      if (relatedProduct) {
+        // If it's a string that could be JSON
+        if (typeof relatedProduct === 'string' && relatedProduct.startsWith('[')) {
+          try {
+            relatedProductArray = JSON.parse(relatedProduct);
+          } catch (e) {
+            // If JSON parsing fails, treat as comma-separated string
+            relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+          }
+        } 
+        // If it's a comma-separated string
+        else if (typeof relatedProduct === 'string') {
+          relatedProductArray = relatedProduct.split(',').map(id => id.trim());
+        }
+        // If it's already an array (from middleware)
+        else if (Array.isArray(relatedProduct)) {
+          relatedProductArray = relatedProduct;
+        }
+        // If it's a single ID
+        else {
+          relatedProductArray = [relatedProduct];
+        }
+      }
+
       // Update fields
       industry.Title = Title;
       industry.Heading = Heading;
@@ -352,6 +234,8 @@ router.post(
         industry.customerSatisfaction = Number(customerSatisfaction);
       industry.image = imageUrl;
       industry.logo = logoUrl;
+      // Update relatedProduct if provided
+      industry.relatedProduct = relatedProductArray;
 
       await industry.save();
 
@@ -369,6 +253,7 @@ router.post(
     }
   }
 );
+
 
 router.use("/industry/delete", express.json());
 

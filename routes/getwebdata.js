@@ -79,7 +79,13 @@ router.get("/testimonial/get", async (req, res) => {
 
 router.get("/industry/get", async (req, res) => {
   try {
-    const industries = await Industry.find({}); // Fetch all industries from the database
+    const industries = await Industry.find({}).populate({
+      path: "relatedProduct",
+      populate: {
+        path: "category",
+        model: "Service",
+      },
+    }); 
 
     return res.status(200).json({
       success: true,
@@ -168,7 +174,7 @@ router.get("/faq/get", async (req, res) => {
       .populate("relatedServices")
       .populate("relatedIndustries")
       .populate("relatedProducts")
-      .populate("relatedChikfdServices")
+      .populate("relatedChikfdServices");
 
     return res.status(200).json({
       success: true,
@@ -182,7 +188,6 @@ router.get("/faq/get", async (req, res) => {
     });
   }
 });
-
 
 router.get("/servicedetails/get", async (req, res) => {
   try {
