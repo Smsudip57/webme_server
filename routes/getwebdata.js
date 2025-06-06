@@ -79,13 +79,7 @@ router.get("/testimonial/get", async (req, res) => {
 
 router.get("/industry/get", async (req, res) => {
   try {
-    const industries = await Industry.find({}).populate({
-      path: "relatedProduct",
-      populate: {
-        path: "category",
-        model: "Service",
-      },
-    }); 
+    const industries = await Industry.find({}).populate("relatedService"); 
 
     return res.status(200).json({
       success: true,
