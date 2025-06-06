@@ -37,10 +37,10 @@ const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 const upload = multer({ storage });
 router.post('/service/createservice', upload.single('image'), async (req, res) => {
   try {
-    const { Title, detail, moreDetail, category, slug } = req.body;
+    const { Title, Name, detail, moreDetail, category, slug } = req.body;
     const file = req.file;
 
-    if (!Title || !detail || !moreDetail || !category || !file || !slug) {
+    if (!Title || !Name || !detail || !moreDetail || !category || !file || !slug) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
 
@@ -65,6 +65,7 @@ router.post('/service/createservice', upload.single('image'), async (req, res) =
     console.log(imageUrl);
     const newService = new Service({
       Title,
+      Name,
       slug,
       deltail: detail,
       moreDetail,
@@ -128,13 +129,12 @@ router.post('/service/deleteservice', async (req, res) => {
     });
   }
 });
-
 router.post('/service/editservice', upload.single('image'), async (req, res) => {
   try {
-    const { serviceId, Title, deltail, moreDetail, category, slug } = req.body;
+    const { serviceId, Title, Name, deltail, moreDetail, category, slug } = req.body;
     const file = req.file;
 
-    if (!serviceId || !Title || !deltail || !category || !moreDetail || !slug) {
+    if (!serviceId || !Title || !Name || !deltail || !category || !moreDetail || !slug) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required.',
@@ -169,6 +169,7 @@ router.post('/service/editservice', upload.single('image'), async (req, res) => 
     }
 
     service.Title = Title;
+    service.Name = Name;
     service.slug = slug;
     service.deltail = deltail;
     service.category = category;
@@ -205,7 +206,6 @@ router.post('/service/editservice', upload.single('image'), async (req, res) => 
     });
   }
 });
-
 
 router.post('/project/create', async (req, res) => {
   try {

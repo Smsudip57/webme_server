@@ -7,6 +7,11 @@ const serviceSchema = new mongoose.Schema(
       required: [true, 'Title is required'],
       trim: true,
     },
+    Name:{
+      type: String,
+      required: [true, 'Name is required'],
+      trim: true,
+    },
     slug:{
       type: String,
       required: [true, 'Slug is required'],
