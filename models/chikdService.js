@@ -55,6 +55,16 @@ const productSchema = new mongoose.Schema(
       required: [true, 'Detail is required'],
       trim: true,
     },
+    itemsTag: {
+      type: String,
+      required: [true, 'At least one item tag is required'],
+      validate: {
+        validator: function (v) {
+          return v.length > 0;
+        },
+        message: 'At least one item tag is required',
+      },
+    },
      slug:{
           type: String,
           required: [true, 'Slug is required'],

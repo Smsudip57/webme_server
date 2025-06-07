@@ -32,7 +32,6 @@ const upload = multer({ storage });
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
-
 router.post(
   "/testimonial/create",
   upload.fields([
@@ -48,7 +47,7 @@ router.post(
         relatedService,
         relatedIndustries,
         relatedProduct,
-        relatedChikfdServices
+        relatedChikfdServices,
       } = req.body;
 
       if (
@@ -134,7 +133,7 @@ router.post(
         relatedService,
         relatedIndustries,
         relatedProduct,
-        relatedChikfdServices
+        relatedChikfdServices,
       } = req.body;
 
       if (!testimonialId) {
@@ -155,12 +154,13 @@ router.post(
       testimonial.Testimonial = TestimonialText || testimonial.Testimonial;
       testimonial.postedBy = postedBy || testimonial.postedBy;
       testimonial.role = role || testimonial.role;
-      
+
       // Update relation fields if provided
       if (relatedService) testimonial.relatedService = relatedService;
       if (relatedIndustries) testimonial.relatedIndustries = relatedIndustries;
       if (relatedProduct) testimonial.relatedProduct = relatedProduct;
-      if (relatedChikfdServices) testimonial.relatedChikfdServices = relatedChikfdServices;
+      if (relatedChikfdServices)
+        testimonial.relatedChikfdServices = relatedChikfdServices;
 
       // Handle image update if provided
       if (req.files.image) {
@@ -225,7 +225,7 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
-        relatedService
+        relatedService,
       } = req.body;
 
       const files = req.files; // Access uploaded files
@@ -245,17 +245,24 @@ router.post(
       let relatedServiceArray = [];
       if (relatedService) {
         // If it's a string that could be JSON
-        if (typeof relatedService === 'string' && relatedService.startsWith('[')) {
+        if (
+          typeof relatedService === "string" &&
+          relatedService.startsWith("[")
+        ) {
           try {
             relatedServiceArray = JSON.parse(relatedService);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            relatedServiceArray = relatedService.split(',').map(id => id.trim());
+            relatedServiceArray = relatedService
+              .split(",")
+              .map((id) => id.trim());
           }
-        } 
+        }
         // If it's a comma-separated string
-        else if (typeof relatedService === 'string') {
-          relatedServiceArray = relatedService.split(',').map(id => id.trim());
+        else if (typeof relatedService === "string") {
+          relatedServiceArray = relatedService
+            .split(",")
+            .map((id) => id.trim());
         }
         // If it's already an array (from middleware)
         else if (Array.isArray(relatedService)) {
@@ -276,7 +283,7 @@ router.post(
         customerSatisfaction: Number(customerSatisfaction) || 0,
         image: imageUrl,
         logo: logoUrl,
-        relatedService: relatedServiceArray
+        relatedService: relatedServiceArray,
       });
 
       await newIndustry.save();
@@ -312,7 +319,7 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
-        relatedService
+        relatedService,
       } = req.body;
 
       if (!id || !Title || !Heading || !detail) {
@@ -379,17 +386,24 @@ router.post(
       let relatedServiceArray = industry.relatedService || []; // Default to existing array
       if (relatedService) {
         // If it's a string that could be JSON
-        if (typeof relatedService === 'string' && relatedService.startsWith('[')) {
+        if (
+          typeof relatedService === "string" &&
+          relatedService.startsWith("[")
+        ) {
           try {
             relatedServiceArray = JSON.parse(relatedService);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            relatedServiceArray = relatedService.split(',').map(id => id.trim());
+            relatedServiceArray = relatedService
+              .split(",")
+              .map((id) => id.trim());
           }
-        } 
+        }
         // If it's a comma-separated string
-        else if (typeof relatedService === 'string') {
-          relatedServiceArray = relatedService.split(',').map(id => id.trim());
+        else if (typeof relatedService === "string") {
+          relatedServiceArray = relatedService
+            .split(",")
+            .map((id) => id.trim());
         }
         // If it's already an array (from middleware)
         else if (Array.isArray(relatedService)) {
@@ -430,7 +444,6 @@ router.post(
     }
   }
 );
-
 
 router.use("/industry/delete", express.json());
 
@@ -490,7 +503,7 @@ router.post(
   "/product/create",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 },
+    { name: "sectionImages", maxCount: 30 },
   ]),
   async (req, res) => {
     try {
@@ -718,7 +731,7 @@ router.put(
   "/product/edit",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 },
+    { name: "sectionImages", maxCount: 30 },
   ]),
   async (req, res) => {
     try {
@@ -885,7 +898,7 @@ router.post(
   "/child/create",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 },
+    { name: "sectionImages", maxCount: 30 },
   ]),
   async (req, res) => {
     try {
@@ -896,6 +909,7 @@ router.post(
         moreDetail,
         category,
         slug,
+        itemsTag,
         sections: sectionsJSON,
       } = req.body;
 
@@ -906,13 +920,14 @@ router.post(
         !moreDetail ||
         !category ||
         !slug ||
+        !itemsTag ||
         !sectionsJSON ||
         !req.files.mainImage
       ) {
         return res.status(400).json({
           success: false,
           message:
-            "All fields are required: Title, detail, moreDetail, category, slug, sections, and mainImage",
+            "All fields are required: Title, detail, moreDetail, category, slug, itemsTag, sections, and mainImage",
         });
       }
 
@@ -931,6 +946,29 @@ router.post(
         return res.status(400).json({
           success: false,
           message: "Slug already exists. Please use a unique slug.",
+        });
+      }
+
+      // Process itemsTag - convert to string if needed
+      let itemsTagString = "";
+      if (itemsTag) {
+        if (typeof itemsTag === "string") {
+          // If it's already a string, use it directly
+          itemsTagString = itemsTag.trim();
+        } else if (Array.isArray(itemsTag)) {
+          // If it's an array, join with commas
+          itemsTagString = itemsTag.join(", ");
+        } else {
+          // Convert other types to string
+          itemsTagString = String(itemsTag).trim();
+        }
+      }
+
+      // Validate itemsTag string
+      if (!itemsTagString || itemsTagString.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one item tag is required",
         });
       }
 
@@ -1008,6 +1046,7 @@ router.post(
         detail,
         moreDetail,
         slug,
+        itemsTag: itemsTagString,
         image: mainImageUrl,
         category,
         sections: processedSections,
@@ -1121,7 +1160,7 @@ router.put(
   "/child/edit",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 10 },
+    { name: "sectionImages", maxCount: 30 },
   ]),
   async (req, res) => {
     try {
@@ -1133,6 +1172,7 @@ router.put(
         moreDetail,
         category,
         slug,
+        itemsTag,
         sections: sectionsJSON,
         imagesToDelete,
       } = req.body;
@@ -1177,6 +1217,29 @@ router.put(
               message: "Slug already exists. Please use a unique slug.",
             });
           }
+        }
+      }
+
+      // Process itemsTag if provided
+      let itemsTagString = existingChildService.itemsTag || "";
+      if (itemsTag !== undefined) {
+        if (typeof itemsTag === "string") {
+          // If it's already a string, use it directly
+          itemsTagString = itemsTag.trim();
+        } else if (Array.isArray(itemsTag)) {
+          // If it's an array, join with commas
+          itemsTagString = itemsTag.join(", ");
+        } else {
+          // Convert other types to string
+          itemsTagString = String(itemsTag).trim();
+        }
+
+        // Validate itemsTag string
+        if (!itemsTagString || itemsTagString.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "At least one item tag is required",
+          });
         }
       }
 
@@ -1263,6 +1326,7 @@ router.put(
           detail: detail || existingChildService.detail,
           moreDetail: moreDetail || existingChildService.moreDetail,
           slug: slug || existingChildService.slug,
+          itemsTag: itemsTagString,
           image: mainImageUrl,
           category: category || existingChildService.category,
           sections: updatedSections,
