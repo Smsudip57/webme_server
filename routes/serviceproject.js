@@ -35,6 +35,37 @@ const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
 
 const upload = multer({ storage });
+
+// Image upload endpoint
+router.post('/upload/image', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No image file provided"
+      });
+    }
+
+    // Get the image URL using the existing function
+    const imageUrl = getImageUrl(req.file.filename);
+
+    return res.status(200).json({
+      success: true,
+      message: "Image uploaded successfully",
+      imageUrl: imageUrl,
+      filename: req.file.filename
+    });
+  } catch (error) {
+    console.error("Error uploading image:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error uploading image",
+      error: error.message
+    });
+  }
+});
+
+
 router.post('/service/createservice', upload.single('image'), async (req, res) => {
   try {
     const { Title, Name, detail, moreDetail, category, slug } = req.body;
@@ -696,12 +727,84 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
   try {
     const { type, title, description, points, relatedService, relatedIndustries } = req.body;
     const image = req.file ? getImageUrl(req.file.filename) : null;
-    if (!type || !title || !description || !image || !points) {
-      return res.status(400).json({ success: false, message: "All required fields must be provided" });
+    
+    // Check required fields
+    if (!type || !title || !description || !image) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Type, title, description, and image are required fields" 
+      });
     }
 
     // Parse points if it's sent as a JSON string
-    const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
+    let parsedPoints = [];
+    try {
+      parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
+      
+      // Validate points structure
+      if (!Array.isArray(parsedPoints)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Points must be an array" 
+        });
+      }
+
+      // Validate each point's structure
+      for (const point of parsedPoints) {
+        if (!point.title) {
+          return res.status(400).json({ 
+            success: false, 
+            message: "Each point must have a title" 
+          });
+        }
+
+        if (!point.explanationType || !['article', 'bullets'].includes(point.explanationType)) {
+          return res.status(400).json({ 
+            success: false, 
+            message: "Each point must have a valid explanationType (article or bullets)" 
+          });
+        }
+
+        // Validate based on explanationType
+        if (point.explanationType === 'article' && !point.article) {
+          return res.status(400).json({ 
+            success: false, 
+            message: "Points with 'article' explanationType must include article content" 
+          });
+        }
+
+        if (point.explanationType === 'bullets') {
+          if (!Array.isArray(point.bullets) || point.bullets.length === 0) {
+            return res.status(400).json({ 
+              success: false, 
+              message: "Points with 'bullets' explanationType must include at least one bullet point" 
+            });
+          }
+
+          // Validate each bullet
+          for (const bullet of point.bullets) {
+            if (!bullet.style || !['number', 'dot', 'roman'].includes(bullet.style)) {
+              return res.status(400).json({ 
+                success: false, 
+                message: "Each bullet must have a valid style (number, dot, or roman)" 
+              });
+            }
+            if (!bullet.content) {
+              return res.status(400).json({ 
+                success: false, 
+                message: "Each bullet must have content" 
+              });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing points:", error);
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid points format" 
+      });
+    }
 
     const newBlog = new Blog({
       type,
@@ -709,40 +812,53 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
       title,
       description,
       points: parsedPoints,
-      relatedService,
-      relatedIndustries,
+      relatedService: relatedService || null,
+      relatedIndustries: relatedIndustries || null,
     });
 
     await newBlog.save();
-    return res.status(201).json({ success: true, message: "Blog created successfully" });
+    return res.status(201).json({ 
+      success: true, 
+      message: "Blog created successfully",
+      blog: newBlog 
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Error creating blog:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal server error",
+      error: error.message 
+    });
   }
 });
-
-
-
-
-
 
 router.post("/blog/edit", upload.single("image"), async (req, res) => {
   try {
     const { blogId, type, title, description, points, relatedService, relatedIndustries } = req.body;
 
     if (!blogId) {
-      return res.status(400).json({ success: false, message: "Blog ID is required" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Blog ID is required" 
+      });
     }
 
     const blog = await Blog.findById(blogId);
     if (!blog) {
-      return res.status(404).json({ success: false, message: "Blog not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Blog not found" 
+      });
     }
 
+    // Update basic fields if provided
     if (type) blog.type = type;
     if (title) blog.title = title;
     if (description) blog.description = description;
+    if (relatedService) blog.relatedService = relatedService;
+    if (relatedIndustries) blog.relatedIndustries = relatedIndustries;
 
+    // Handle image update
     if (req.file) {
       if (blog.image) {
         const oldImagePath = path.join(process.cwd(), 'public', blog.image.split('/').pop());
@@ -757,19 +873,159 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
       blog.image = getImageUrl(req.file.filename);
     }
 
+    // Handle points update if provided
     if (points) {
-      const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
-      blog.points = parsedPoints;
+      try {
+        const parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
+        
+        // Validate points structure
+        if (!Array.isArray(parsedPoints)) {
+          return res.status(400).json({ 
+            success: false, 
+            message: "Points must be an array" 
+          });
+        }
+
+        // Validate each point's structure
+        for (const point of parsedPoints) {
+          if (!point.title) {
+            return res.status(400).json({ 
+              success: false, 
+              message: "Each point must have a title" 
+            });
+          }
+
+          if (!point.explanationType || !['article', 'bullets'].includes(point.explanationType)) {
+            return res.status(400).json({ 
+              success: false, 
+              message: "Each point must have a valid explanationType (article or bullets)" 
+            });
+          }
+
+          // Validate based on explanationType
+          if (point.explanationType === 'article' && !point.article) {
+            return res.status(400).json({ 
+              success: false, 
+              message: "Points with 'article' explanationType must include article content" 
+            });
+          }
+
+          if (point.explanationType === 'bullets') {
+            if (!Array.isArray(point.bullets) || point.bullets.length === 0) {
+              return res.status(400).json({ 
+                success: false, 
+                message: "Points with 'bullets' explanationType must include at least one bullet point" 
+              });
+            }
+
+            // Validate each bullet
+            for (const bullet of point.bullets) {
+              if (!bullet.style || !['number', 'dot', 'roman'].includes(bullet.style)) {
+                return res.status(400).json({ 
+                  success: false, 
+                  message: "Each bullet must have a valid style (number, dot, or roman)" 
+                });
+              }
+              if (!bullet.content) {
+                return res.status(400).json({ 
+                  success: false, 
+                  message: "Each bullet must have content" 
+                });
+              }
+            }
+          }
+        }
+        
+        blog.points = parsedPoints;
+      } catch (error) {
+        console.error("Error parsing points:", error);
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid points format" 
+        });
+      }
     }
 
-    if (relatedService) blog.relatedService = relatedService;
-    if (relatedIndustries) blog.relatedIndustries = relatedIndustries;
-
     await blog.save();
-    return res.status(200).json({ success: true, message: "Blog updated successfully" });
+    return res.status(200).json({ 
+      success: true, 
+      message: "Blog updated successfully",
+      blog: blog 
+    });
   } catch (error) {
     console.error("Error updating blog:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal server error",
+      error: error.message 
+    });
+  }
+});
+
+router.use('/blog/delete', express.json());
+
+router.post('/blog/delete', async (req, res) => {
+  try {
+    const { blogId } = req.body;
+
+    if (!blogId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Blog ID is required'
+      });
+    }
+
+    const blog = await Blog.findById(blogId);
+    if (!blog) {
+      return res.status(404).json({
+        success: false,
+        message: 'Blog not found'
+      });
+    }
+
+    // Delete the associated image file if it exists
+    if (blog.image) {
+      const imagePath = path.join(process.cwd(), 'public', blog.image.split('/').pop());
+      try {
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+      } catch (err) {
+        console.error('Error deleting blog image file:', err);
+        // Continue with deletion even if image removal fails
+      }
+    }
+
+    // Delete any point images if they exist
+    if (blog.points && blog.points.length > 0) {
+      for (const point of blog.points) {
+        if (point.image && typeof point.image === 'string') {
+          const pointImagePath = path.join(process.cwd(), 'public', point.image.split('/').pop());
+          try {
+            if (fs.existsSync(pointImagePath)) {
+              fs.unlinkSync(pointImagePath);
+            }
+          } catch (err) {
+            console.error('Error deleting point image file:', err);
+            // Continue with deletion even if image removal fails
+          }
+        }
+      }
+    }
+
+    await blog.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Blog deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting blog:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.',
+      error: error.message
+    });
   }
 });
 
@@ -807,27 +1063,69 @@ router.post("/knowledgebase/create", upload.single("Image"), async (req, res) =>
         ? JSON.parse(mainSections)
         : mainSections;
         
-      // Validate mainSections structure
+      // Validate mainSections structure based on updated schema
+      if (!Array.isArray(parsedMainSections)) {
+        return res.status(400).json({
+          success: false,
+          message: "mainSections must be an array"
+        });
+      }
+
       for (const section of parsedMainSections) {
-        if (!section.title || !section.content) {
+        if (!section.title) {
           return res.status(400).json({
             success: false,
-            message: "Each section must have a title and content"
+            message: "Each section must have a title"
           });
         }
-        
-        // Make sure points is an array even if empty
-        if (!section.points) {
-          section.points = [];
-        } else if (section.points.length > 0) {
-          // Validate points structure
-          for (const point of section.points) {
-            if (!point.title || !point.description) {
+
+        if (!section.explanationType || !['article', 'bullets'].includes(section.explanationType)) {
+          return res.status(400).json({
+            success: false,
+            message: "Each section must have a valid explanationType (article or bullets)"
+          });
+        }
+
+        // Validate based on explanationType
+        if (section.explanationType === 'article' && !section.article) {
+          return res.status(400).json({
+            success: false,
+            message: "Sections with 'article' explanationType must include article content"
+          });
+        }
+
+        if (section.explanationType === 'bullets') {
+          if (!Array.isArray(section.bullets) || section.bullets.length === 0) {
+            return res.status(400).json({
+              success: false,
+              message: "Sections with 'bullets' explanationType must include at least one bullet point"
+            });
+          }
+
+          // Validate each bullet
+          for (const bullet of section.bullets) {
+            if (!bullet.style || !['number', 'dot', 'roman'].includes(bullet.style)) {
               return res.status(400).json({
                 success: false,
-                message: "Each point must have a title and description"
+                message: "Each bullet must have a valid style (number, dot, or roman)"
               });
             }
+            if (!bullet.content) {
+              return res.status(400).json({
+                success: false,
+                message: "Each bullet must have content"
+              });
+            }
+          }
+        }
+
+        // Validate image if present
+        if (section.image && typeof section.image === 'string') {
+          if (!/^(http|https):\/\/|^\/|^[^\/]/.test(section.image)) {
+            return res.status(400).json({
+              success: false,
+              message: `Invalid image path or URL in section: ${section.title}`
+            });
           }
         }
       }
@@ -859,6 +1157,7 @@ router.post("/knowledgebase/create", upload.single("Image"), async (req, res) =>
       ? JSON.parse(relatedChikfdServices) 
       : relatedChikfdServices || [];
 
+    // Create new article
     const newArticle = new KnowledgeBase({
       title,
       Image: imageUrl,
@@ -947,27 +1246,69 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
           ? JSON.parse(mainSections)
           : mainSections;
         
-        // Validate mainSections structure
+        // Validate mainSections structure based on updated schema
+        if (!Array.isArray(parsedMainSections)) {
+          return res.status(400).json({
+            success: false,
+            message: "mainSections must be an array"
+          });
+        }
+
         for (const section of parsedMainSections) {
-          if (!section.title || !section.content) {
+          if (!section.title) {
             return res.status(400).json({
               success: false,
-              message: "Each section must have a title and content"
+              message: "Each section must have a title"
             });
           }
-          
-          // Make sure points is an array even if empty
-          if (!section.points) {
-            section.points = [];
-          } else if (section.points.length > 0) {
-            // Validate points structure
-            for (const point of section.points) {
-              if (!point.title || !point.description) {
+
+          if (!section.explanationType || !['article', 'bullets'].includes(section.explanationType)) {
+            return res.status(400).json({
+              success: false,
+              message: "Each section must have a valid explanationType (article or bullets)"
+            });
+          }
+
+          // Validate based on explanationType
+          if (section.explanationType === 'article' && !section.article) {
+            return res.status(400).json({
+              success: false,
+              message: "Sections with 'article' explanationType must include article content"
+            });
+          }
+
+          if (section.explanationType === 'bullets') {
+            if (!Array.isArray(section.bullets) || section.bullets.length === 0) {
+              return res.status(400).json({
+                success: false,
+                message: "Sections with 'bullets' explanationType must include at least one bullet point"
+              });
+            }
+
+            // Validate each bullet
+            for (const bullet of section.bullets) {
+              if (!bullet.style || !['number', 'dot', 'roman'].includes(bullet.style)) {
                 return res.status(400).json({
                   success: false,
-                  message: "Each point must have a title and description"
+                  message: "Each bullet must have a valid style (number, dot, or roman)"
                 });
               }
+              if (!bullet.content) {
+                return res.status(400).json({
+                  success: false,
+                  message: "Each bullet must have content"
+                });
+              }
+            }
+          }
+
+          // Validate image if present
+          if (section.image && typeof section.image === 'string') {
+            if (!/^(http|https):\/\/|^\/|^[^\/]/.test(section.image)) {
+              return res.status(400).json({
+                success: false,
+                message: `Invalid image path or URL in section: ${section.title}`
+              });
             }
           }
         }
@@ -1041,7 +1382,75 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
     });
   }
 });
-// CREATE FAQ
+
+router.use('/knowledgebase/delete', express.json());
+
+router.post('/knowledgebase/delete', async (req, res) => {
+  try {
+    const { articleId } = req.body;
+
+    if (!articleId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Article ID is required'
+      });
+    }
+
+    const article = await KnowledgeBase.findById(articleId);
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        message: 'Article not found'
+      });
+    }
+
+    // Delete the associated image file if it exists
+    if (article.Image) {
+      const imagePath = path.join(process.cwd(), 'public', article.Image.split('/').pop());
+      try {
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+      } catch (err) {
+        console.error('Error deleting article image file:', err);
+        // Continue with deletion even if image removal fails
+      }
+    }
+
+    // Delete section images if they exist
+    if (article.mainSections && article.mainSections.length > 0) {
+      for (const section of article.mainSections) {
+        if (section.image && typeof section.image === 'string') {
+          const sectionImagePath = path.join(process.cwd(), 'public', section.image.split('/').pop());
+          try {
+            if (fs.existsSync(sectionImagePath)) {
+              fs.unlinkSync(sectionImagePath);
+            }
+          } catch (err) {
+            console.error('Error deleting section image file:', err);
+            // Continue with deletion even if image removal fails
+          }
+        }
+      }
+    }
+
+    await article.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Knowledge base article deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting knowledge base article:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.',
+      error: error.message
+    });
+  }
+});
+
+
 router.use("/faq/create", express.json())
 router.post("/faq/create", async (req, res) => {
   try {

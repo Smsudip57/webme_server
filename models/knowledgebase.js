@@ -1,14 +1,62 @@
 const mongoose = require("mongoose");
 
-const SubPointSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  description: { type: String, required: true }
+
+const bulletsSchema = new mongoose.Schema({
+  style: { 
+    type: String, 
+    enum: ["number", "dot", "roman"], 
+    required: true,
+    default: "dot"
+  },
+  content: { 
+    type: String, 
+    required: true,
+    trim: true 
+  },
 });
 
-const SectionSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  content: { type: String, required: true },
-  points: [SubPointSchema]
+const PointSchema = new mongoose.Schema({
+  title: { 
+    type: String, 
+    required: true,
+    trim: true 
+  },
+  explanationType: { 
+    type: String,
+    enum: ['article', 'bullets'], 
+    required: true,
+    default: 'article'
+  }, 
+  article: { 
+    type: String,
+    required: function() {
+      return this.explanationType === 'article';
+    },
+    trim: true
+  },
+  bullets: { 
+    type: [bulletsSchema],
+    validate: {
+      validator: function(v) {
+        if (this.explanationType === 'bullets') {
+          return Array.isArray(v) && v.length > 0;
+        }
+        return true;
+      },
+      message: 'At least one bullet point is required when explanation type is bullets'
+    }
+  }, 
+  image: { 
+    type: String,
+    trim: true,
+    validate: {
+      validator: function(v) {
+        if (!v) return true;
+        return /^(http|https):\/\/|^\/|^[^\/]/.test(v);
+      },
+      message: props => `${props.value} is not a valid image path or URL`
+    }
+  },
 });
 
 const ArticleSchema = new mongoose.Schema({
@@ -24,7 +72,7 @@ const ArticleSchema = new mongoose.Schema({
     }
   },
   introduction: { type: String, required: true },
-  mainSections: [SectionSchema],
+  mainSections: [PointSchema],
   conclusion: { type: String, required: true },
   tags: [String],
   relatedServices: [{
