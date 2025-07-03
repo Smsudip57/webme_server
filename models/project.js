@@ -64,11 +64,18 @@ const projectSchema = new mongoose.Schema(
         message: (props) => `${props.value} is not a valid slug format`,
       },
     },
-    relatedServices: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Service",
-      required: [true, "Related service is required"],
-    },
+    relatedServices: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Service'
+    }],
+    relatedProducts: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+      }],
+      relatedChikfdServices: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ChildService'
+      }],
     detail: {
       type: String,
       required: [true, "Detail is required"],
