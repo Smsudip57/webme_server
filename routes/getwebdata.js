@@ -79,7 +79,7 @@ router.get("/testimonial/get", async (req, res) => {
 
 router.get("/industry/get", async (req, res) => {
   try {
-    const industries = await Industry.find({}).populate("relatedService"); 
+    const industries = await Industry.find({}).populate("relatedService");
 
     return res.status(200).json({
       success: true,
@@ -132,9 +132,22 @@ router.get("/child/get", async (req, res) => {
 
 router.get("/blog/get", async (req, res) => {
   try {
-    // Step 4: Fetch all products from the database
-    const blogs = await Blog.find(); // Add filters or pagination if needed
-    // Step 5: Return the products data in the response
+    const { slug } = req.query;
+
+    // If slug is provided, find specific blog
+    if (slug) {
+      const blog = await Blog.findOne({ slug });
+      if (!blog) {
+        return res.status(404).json({
+          success: false,
+          message: "Blog not found with the provided slug"
+        });
+      }
+      return res.status(200).json({ success: true, blog });
+    }
+
+    // If no slug, return all blogs
+    const blogs = await Blog.find();
     return res.status(200).json({ success: true, blogs });
   } catch (err) {
     console.error(err);
@@ -146,9 +159,22 @@ router.get("/blog/get", async (req, res) => {
 
 router.get("/knowledgebase/get", async (req, res) => {
   try {
-    const knowledgebases = await KnowledgeBase.find().populate(
-      "relatedServices"
-    );
+    const { slug } = req.query;
+
+    // If slug is provided, find specific knowledge base article
+    if (slug) {
+      const knowledgebase = await KnowledgeBase.findOne({ slug }).populate("relatedServices");
+      if (!knowledgebase) {
+        return res.status(404).json({
+          success: false,
+          message: "Knowledge base article not found with the provided slug"
+        });
+      }
+      return res.status(200).json({ success: true, knowledgebase });
+    }
+
+    // If no slug, return all knowledge base articles
+    const knowledgebases = await KnowledgeBase.find().populate("relatedServices");
     return res.status(200).json({
       success: true,
       knowledgebases,
@@ -311,5 +337,100 @@ router.get("/search", async (req, res) => {
       .json({ success: false, message: "Server error", error: err.message });
   }
 });
+
+
+router.get("/get/bulk", async (req, res) => {
+  try {
+    const { keys } = req.query;
+
+    if (!keys) {
+      return res.status(400).json({
+        success: false,
+        message: "Keys parameter is required. Example: ?keys=services,projects,industries"
+      });
+    }
+
+    const requestedKeys = Array.isArray(keys) ? keys : keys.split(',').map(k => k.trim());
+
+    const startTime = Date.now();
+
+    const dataSources = {
+      services: () => Service.find({}),
+      projects: () => Project.find({}),
+      industries: () => Industry.find({}).populate("relatedService"),
+      testimonials: () => Testimonial.find().populate("relatedService"),
+      products: () => Product.find({}),
+      childServices: () => ChildService.find({}),
+      blogs: () => Blog.find({}),
+      knowledgebase: () => KnowledgeBase.find().populate("relatedServices"),
+      faqs: () => Faq.find()
+        .populate("relatedServices")
+        .populate("relatedIndustries")
+        .populate("relatedProducts")
+        .populate("relatedChikfdServices"),
+      serviceDetails: () => ServiceDetails.find().populate("relatedServices"),
+      users: () => User.find({}).select('-password')
+    };
+
+    const invalidKeys = requestedKeys.filter(key => !dataSources[key]);
+    if (invalidKeys.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid keys: ${invalidKeys.join(', ')}. Available keys: ${Object.keys(dataSources).join(', ')}`
+      });
+    }
+
+    // Create parallel promises for requested data
+    const promises = requestedKeys.map(async (key) => {
+      try {
+        const data = await dataSources[key]();
+        return { key, data: data || [] };
+      } catch (error) {
+        return { key, data: [], error: error.message };
+      }
+    });
+
+    // Execute all queries in parallel
+    const results = await Promise.all(promises);
+
+    // Transform results into a clean object
+    const responseData = {};
+    let totalItems = 0;
+    const errors = {};
+
+    results.forEach(({ key, data, error }) => {
+      if (error) {
+        errors[key] = error;
+        responseData[key] = [];
+      } else {
+        responseData[key] = data;
+        totalItems += data.length;
+      }
+    });
+
+    const endTime = Date.now();
+    console.log(`Bulk API: ${requestedKeys.join(', ')} → ${endTime - startTime}ms (${totalItems} items)`);
+
+    // Send response
+    return res.status(200).json({
+      success: true,
+      message: `Successfully fetched ${requestedKeys.length} data sources`,
+      requestedKeys,
+      totalItems,
+      executionTime: `${endTime - startTime}ms`,
+      data: responseData,
+      ...(Object.keys(errors).length > 0 && { errors })
+    });
+
+  } catch (error) {
+    console.error("Bulk API error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+})
+
 
 module.exports = router;
