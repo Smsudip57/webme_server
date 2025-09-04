@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const slugify = require("slugify");
+const emojiRegex = require('emoji-regex');
 
 
 const BlogSchema = new mongoose.Schema(
@@ -43,10 +44,14 @@ const BlogSchema = new mongoose.Schema(
 
 // Function to generate unique slug
 async function generateUniqueSlug(title, blogId = null) {
-  const baseSlug = slugify(title, {
+  // Remove all emojis using the emoji-regex library
+  const regex = emojiRegex();
+  const titleWithoutEmojis = title.replace(regex, '');
+
+  const baseSlug = slugify(titleWithoutEmojis, {
     lower: true,
     strict: true,
-    remove: /[*+~.()'"!:@]/g
+    remove: /[*+~.()'"!:@#$%^&={}[\]|\\:";'<>?,./]/g
   });
 
   let slug = baseSlug;

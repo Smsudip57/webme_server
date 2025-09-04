@@ -947,8 +947,10 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
       title,
       description,
       contents,
-      relatedService,
+      relatedServices,
       relatedIndustries,
+      relatedProducts,
+      relatedChikfdServices,
     } = req.body;
     const image = req.file ? getImageUrl(req.file.filename) : null;
 
@@ -977,14 +979,30 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
       });
     }
 
+    // Parse related items if they're sent as strings
+    const parsedRelatedServices = typeof relatedServices === "string"
+      ? JSON.parse(relatedServices)
+      : relatedServices || [];
+    const parsedRelatedIndustries = typeof relatedIndustries === "string"
+      ? JSON.parse(relatedIndustries)
+      : relatedIndustries || [];
+    const parsedRelatedProducts = typeof relatedProducts === "string"
+      ? JSON.parse(relatedProducts)
+      : relatedProducts || [];
+    const parsedRelatedChikfdServices = typeof relatedChikfdServices === "string"
+      ? JSON.parse(relatedChikfdServices)
+      : relatedChikfdServices || [];
+
     const newBlog = new Blog({
       type,
       image,
       title,
       description,
       contents,
-      relatedService: relatedService || null,
-      relatedIndustries: relatedIndustries || null,
+      relatedServices: parsedRelatedServices,
+      relatedIndustries: parsedRelatedIndustries,
+      relatedProducts: parsedRelatedProducts,
+      relatedChikfdServices: parsedRelatedChikfdServices,
     });
 
     await newBlog.save();
@@ -1011,8 +1029,10 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
       title,
       description,
       contents,
-      relatedService,
+      relatedServices,
       relatedIndustries,
+      relatedProducts,
+      relatedChikfdServices,
     } = req.body;
 
     if (!blogId) {
@@ -1034,8 +1054,36 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
     if (type) blog.type = type;
     if (title) blog.title = title;
     if (description) blog.description = description;
-    if (relatedService) blog.relatedService = relatedService;
-    if (relatedIndustries) blog.relatedIndustries = relatedIndustries;
+
+    // Parse and update related items if provided
+    if (relatedServices !== undefined) {
+      const parsedRelatedServices = typeof relatedServices === "string"
+        ? JSON.parse(relatedServices)
+        : relatedServices || [];
+      blog.relatedServices = parsedRelatedServices;
+    }
+
+    console.log(typeof relatedIndustries === "string");
+    if (relatedIndustries !== undefined) {
+      const parsedRelatedIndustries = typeof relatedIndustries === "string"
+        ? JSON.parse(relatedIndustries)
+        : relatedIndustries || [];
+      blog.relatedIndustries = parsedRelatedIndustries;
+    }
+
+    if (relatedProducts !== undefined) {
+      const parsedRelatedProducts = typeof relatedProducts === "string"
+        ? JSON.parse(relatedProducts)
+        : relatedProducts || [];
+      blog.relatedProducts = parsedRelatedProducts;
+    }
+
+    if (relatedChikfdServices !== undefined) {
+      const parsedRelatedChikfdServices = typeof relatedChikfdServices === "string"
+        ? JSON.parse(relatedChikfdServices)
+        : relatedChikfdServices || [];
+      blog.relatedChikfdServices = parsedRelatedChikfdServices;
+    }
 
     // Handle image update
     if (req.file) {
@@ -1148,16 +1196,14 @@ router.post("/blog/delete", async (req, res) => {
   }
 });
 
-router.post(
-  "/knowledgebase/create",
+router.post("/knowledgebase/create",
   upload.single("Image"),
   async (req, res) => {
     try {
       const {
         title,
         introduction,
-        mainSections,
-        conclusion,
+        contents,
         tags,
         relatedServices,
         relatedIndustries,
@@ -1170,112 +1216,33 @@ router.post(
       if (
         !title ||
         !introduction ||
-        !conclusion ||
-        !mainSections ||
+        !contents ||
         !req.file
       ) {
         return res.status(400).json({
           success: false,
           message:
-            "Required fields are missing (title, introduction, conclusion, mainSections, and image)",
+            "Required fields are missing (title, introduction, contents, and image)",
         });
       }
 
       // Get image URL
       const imageUrl = getImageUrl(req.file.filename);
 
-      // Parse mainSections if it's sent as a string
-      let parsedMainSections;
-      try {
-        parsedMainSections =
-          typeof mainSections === "string"
-            ? JSON.parse(mainSections)
-            : mainSections;
-
-        // Validate mainSections structure based on updated schema
-        if (!Array.isArray(parsedMainSections)) {
-          return res.status(400).json({
-            success: false,
-            message: "mainSections must be an array",
-          });
-        }
-
-        for (const section of parsedMainSections) {
-          if (!section.title) {
-            return res.status(400).json({
-              success: false,
-              message: "Each section must have a title",
-            });
-          }
-
-          if (
-            !section.explanationType ||
-            !["article", "bullets"].includes(section.explanationType)
-          ) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Each section must have a valid explanationType (article or bullets)",
-            });
-          }
-
-          // Validate based on explanationType
-          if (section.explanationType === "article" && !section.article) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Sections with 'article' explanationType must include article content",
-            });
-          }
-
-          if (section.explanationType === "bullets") {
-            if (
-              !Array.isArray(section.bullets) ||
-              section.bullets.length === 0
-            ) {
-              return res.status(400).json({
-                success: false,
-                message:
-                  "Sections with 'bullets' explanationType must include at least one bullet point",
-              });
-            }
-
-            // Validate each bullet
-            for (const bullet of section.bullets) {
-              if (
-                !bullet.style ||
-                !["number", "dot", "roman"].includes(bullet.style)
-              ) {
-                return res.status(400).json({
-                  success: false,
-                  message:
-                    "Each bullet must have a valid style (number, dot, or roman)",
-                });
-              }
-              if (!bullet.content) {
-                return res.status(400).json({
-                  success: false,
-                  message: "Each bullet must have content",
-                });
-              }
-            }
-          }
-
-          // Validate image if present
-          if (section.image && typeof section.image === "string") {
-            if (!/^(http|https):\/\/|^\/|^[^\/]/.test(section.image)) {
-              return res.status(400).json({
-                success: false,
-                message: `Invalid image path or URL in section: ${section.title}`,
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error parsing mainSections:", error);
+      // Validate that contents is a string (HTML content)
+      if (typeof contents !== "string") {
         return res.status(400).json({
           success: false,
-          message: "Invalid mainSections format",
+          message: "Contents must be a string",
+        });
+      }
+
+      // Basic validation for non-empty contents (after stripping HTML tags)
+      const textContent = contents.replace(/<[^>]*>/g, '').trim();
+      if (textContent.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Contents cannot be empty",
         });
       }
 
@@ -1283,7 +1250,7 @@ router.post(
       const parsedTags =
         typeof tags === "string" ? JSON.parse(tags) : tags || [];
 
-      // Parse related items
+      // Parse related items if they're sent as strings
       const parsedRelatedServices =
         typeof relatedServices === "string"
           ? JSON.parse(relatedServices)
@@ -1309,8 +1276,7 @@ router.post(
         title,
         Image: imageUrl,
         introduction,
-        mainSections: parsedMainSections,
-        conclusion,
+        contents,
         tags: parsedTags,
         relatedServices: parsedRelatedServices,
         relatedIndustries: parsedRelatedIndustries,
@@ -1343,8 +1309,7 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
       articleId,
       title,
       introduction,
-      mainSections,
-      conclusion,
+      contents,
       tags,
       relatedServices,
       relatedIndustries,
@@ -1390,104 +1355,6 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
       article.Image = getImageUrl(req.file.filename);
     }
 
-    // Parse mainSections if provided
-    if (mainSections) {
-      try {
-        const parsedMainSections =
-          typeof mainSections === "string"
-            ? JSON.parse(mainSections)
-            : mainSections;
-
-        // Validate mainSections structure based on updated schema
-        if (!Array.isArray(parsedMainSections)) {
-          return res.status(400).json({
-            success: false,
-            message: "mainSections must be an array",
-          });
-        }
-
-        for (const section of parsedMainSections) {
-          if (!section.title) {
-            return res.status(400).json({
-              success: false,
-              message: "Each section must have a title",
-            });
-          }
-
-          if (
-            !section.explanationType ||
-            !["article", "bullets"].includes(section.explanationType)
-          ) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Each section must have a valid explanationType (article or bullets)",
-            });
-          }
-
-          // Validate based on explanationType
-          if (section.explanationType === "article" && !section.article) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Sections with 'article' explanationType must include article content",
-            });
-          }
-
-          if (section.explanationType === "bullets") {
-            if (
-              !Array.isArray(section.bullets) ||
-              section.bullets.length === 0
-            ) {
-              return res.status(400).json({
-                success: false,
-                message:
-                  "Sections with 'bullets' explanationType must include at least one bullet point",
-              });
-            }
-
-            // Validate each bullet
-            for (const bullet of section.bullets) {
-              if (
-                !bullet.style ||
-                !["number", "dot", "roman"].includes(bullet.style)
-              ) {
-                return res.status(400).json({
-                  success: false,
-                  message:
-                    "Each bullet must have a valid style (number, dot, or roman)",
-                });
-              }
-              if (!bullet.content) {
-                return res.status(400).json({
-                  success: false,
-                  message: "Each bullet must have content",
-                });
-              }
-            }
-          }
-
-          // Validate image if present
-          if (section.image && typeof section.image === "string") {
-            if (!/^(http|https):\/\/|^\/|^[^\/]/.test(section.image)) {
-              return res.status(400).json({
-                success: false,
-                message: `Invalid image path or URL in section: ${section.title}`,
-              });
-            }
-          }
-        }
-
-        article.mainSections = parsedMainSections;
-      } catch (error) {
-        console.error("Error parsing mainSections:", error);
-        return res.status(400).json({
-          success: false,
-          message: "Invalid mainSections format",
-        });
-      }
-    }
-
     // Parse tags if provided
     if (tags) {
       const parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
@@ -1497,38 +1364,59 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
     // Update other fields if provided
     if (title) article.title = title;
     if (introduction) article.introduction = introduction;
-    if (conclusion) article.conclusion = conclusion;
 
-    // Parse and update related items
-    if (relatedServices) {
+    // Handle contents update if provided
+    if (contents !== undefined) {
+      // Validate that contents is a string (HTML content)
+      if (typeof contents !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Contents must be a string",
+        });
+      }
+
+      // Basic validation for non-empty contents (after stripping HTML tags)
+      const textContent = contents.replace(/<[^>]*>/g, '').trim();
+      if (textContent.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Contents cannot be empty",
+        });
+      }
+
+      article.contents = contents;
+    }
+
+    // Parse and update related items if provided
+    if (relatedServices !== undefined) {
       const parsedRelatedServices =
         typeof relatedServices === "string"
           ? JSON.parse(relatedServices)
-          : relatedServices;
+          : relatedServices || [];
       article.relatedServices = parsedRelatedServices;
     }
 
-    if (relatedIndustries) {
+    if (relatedIndustries !== undefined) {
       const parsedRelatedIndustries =
         typeof relatedIndustries === "string"
           ? JSON.parse(relatedIndustries)
-          : relatedIndustries;
+          : relatedIndustries || [];
       article.relatedIndustries = parsedRelatedIndustries;
     }
 
-    if (relatedProducts) {
+    if (relatedProducts !== undefined) {
       const parsedRelatedProducts =
         typeof relatedProducts === "string"
           ? JSON.parse(relatedProducts)
-          : relatedProducts;
+          : relatedProducts || [];
       article.relatedProducts = parsedRelatedProducts;
     }
 
-    if (relatedChikfdServices) {
+    if (relatedChikfdServices !== undefined) {
       const parsedRelatedChikfdServices =
         typeof relatedChikfdServices === "string"
           ? JSON.parse(relatedChikfdServices)
-          : relatedChikfdServices;
+          : relatedChikfdServices || [];
       article.relatedChikfdServices = parsedRelatedChikfdServices;
     }
 
@@ -1586,27 +1474,6 @@ router.post("/knowledgebase/delete", async (req, res) => {
       } catch (err) {
         console.error("Error deleting article image file:", err);
         // Continue with deletion even if image removal fails
-      }
-    }
-
-    // Delete section images if they exist
-    if (article.mainSections && article.mainSections.length > 0) {
-      for (const section of article.mainSections) {
-        if (section.image && typeof section.image === "string") {
-          const sectionImagePath = path.join(
-            process.cwd(),
-            "public",
-            section.image.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(sectionImagePath)) {
-              fs.unlinkSync(sectionImagePath);
-            }
-          } catch (err) {
-            console.error("Error deleting section image file:", err);
-            // Continue with deletion even if image removal fails
-          }
-        }
       }
     }
 

@@ -256,7 +256,7 @@ router.get("/search", async (req, res) => {
       }),
 
       // Search in child services
-      ChildService.find({
+      Products.find({
         $or: [
           { Title: { $regex: search, $options: "i" } },
           { detail: { $regex: search, $options: "i" } },
@@ -278,7 +278,7 @@ router.get("/search", async (req, res) => {
         $or: [
           { title: { $regex: search, $options: "i" } },
           { introduction: { $regex: search, $options: "i" } },
-          { conclusion: { $regex: search, $options: "i" } },
+          { contents: { $regex: search, $options: "i" } },
         ],
       }),
 
@@ -291,7 +291,7 @@ router.get("/search", async (req, res) => {
       }),
 
       // Search in products
-      ParentService.find({
+      ChildService.find({
         $or: [
           { Title: { $regex: search, $options: "i" } },
           { detail: { $regex: search, $options: "i" } },
