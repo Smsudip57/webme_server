@@ -7,8 +7,8 @@ const User = require("../models/user");
 const Service = require("../models/service");
 const Industry = require("../models/industry");
 const Testimonial = require("../models/testimonial");
-const Product = require("../models/product");
-const ChildService = require("../models/chikdService");
+const ParentService = require("../models/Parentservice");
+const ChildService = require("../models/childService");
 const { route } = require("./user");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -544,7 +544,7 @@ router.post(
       }
 
       // Check if slug already exists
-      const existingProduct = await Product.findOne({ slug });
+      const existingProduct = await ParentService.findOne({ slug });
       if (existingProduct) {
         return res.status(400).json({
           success: false,
@@ -621,7 +621,7 @@ router.post(
       });
 
       // Create product with processed data
-      const newProduct = new Product({
+      const newProduct = new ParentService({
         Title,
         detail,
         moreDetail,
@@ -677,7 +677,7 @@ router.post("/product/delete", async (req, res) => {
       });
     }
 
-    const product = await Product.findById(productId);
+    const product = await ParentService.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -755,7 +755,7 @@ router.put(
       }
 
       // Find existing product
-      const existingProduct = await Product.findById(productId);
+      const existingProduct = await ParentService.findById(productId);
       if (!existingProduct) {
         return res.status(404).json({
           success: false,
@@ -776,7 +776,7 @@ router.put(
 
         // Check if slug already exists and belongs to a different product
         if (existingProduct.slug !== slug) {
-          const slugExists = await Product.findOne({
+          const slugExists = await ParentService.findOne({
             slug,
             _id: { $ne: productId },
           });
@@ -865,7 +865,7 @@ router.put(
       }
 
       // Update product with all fields
-      const updatedProduct = await Product.findByIdAndUpdate(
+      const updatedProduct = await ParentService.findByIdAndUpdate(
         productId,
         {
           Title: Title || existingProduct.Title,

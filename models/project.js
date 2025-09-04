@@ -27,7 +27,7 @@ const sectionsSchema = new mongoose.Schema({
     required: [true, "Section image is required"],
     trim: true,
     validate: {
-      validator: function(v) {
+      validator: function (v) {
         return Array.isArray(v) && v.length > 0;
       },
       message: "At least one image is required for each section"
@@ -65,17 +65,17 @@ const projectSchema = new mongoose.Schema(
       },
     },
     relatedServices: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service'
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service'
     }],
     relatedProducts: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product'
-      }],
-      relatedChikfdServices: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'ChildService'
-      }],
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Parentservice'
+    }],
+    relatedChikfdServices: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Childservices'
+    }],
     detail: {
       type: String,
       required: [true, "Detail is required"],

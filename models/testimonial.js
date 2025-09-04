@@ -7,40 +7,41 @@ const testimonialSchema = new mongoose.Schema(
       required: [true, 'Testimonial is required'],
       trim: true,
     },
-    video:{
-        type: String,
-        required: [true, 'Video is required'],
+    video: {
+      type: String,
+      required: [true, 'Video is required'],
     },
     image: {
       type: String,
       required: [true, 'Image is required'],
     },
-    postedBy:{
-        type:String,
-        required: [true, 'Author name is required'],
+    postedBy: {
+      type: String,
+      required: [true, 'Author name is required'],
     },
-    role:{
-        type:String,
-        required: [true, 'Role of the author is required'],
+    role: {
+      type: String,
+      required: [true, 'Role of the author is required'],
     },
-    relatedService:{
+    relatedService: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service'
+    },
+    relatedIndustries: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Industry'
+    },
+    relatedProducts: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service'
-    },
-    relatedIndustries:{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Industry'
-    },
-    relatedProduct:{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product'
+        ref: 'Parentservice'
     },
     relatedChikfdServices: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'ChildService'
-          },
-}
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Childservices'
+    },
+  }
 );
+
 
 const Testimonial = mongoose.models.Testimonial || mongoose.model('Testimonial', testimonialSchema);
 

@@ -5,8 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const User = require("../models/user");
 const Service = require("../models/service");
-const Product = require("../models/product");
-const ChildService = require("../models/chikdService");
+const ParentService = require("../models/Parentservice");
+const ChildService = require("../models/childService");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = path.join(process.cwd(), "public");
@@ -301,7 +301,7 @@ router.post("/project/create", async (req, res) => {
         : fields.mediaType || "image";
 
       // Parse related items as arrays
-      
+
 
       const relatedServices = ensureArray(fields.relatedServices);
       const relatedProducts = ensureArray(fields.relatedProducts);
@@ -364,7 +364,7 @@ router.post("/project/create", async (req, res) => {
       // Validate related products exist (if any provided)
       if (relatedProducts.length > 0) {
         for (const productId of relatedProducts) {
-          const productExists = await Product.findById(productId);
+          const productExists = await ParentService.findById(productId);
           if (!productExists) {
             return res.status(400).json({
               success: false,
@@ -432,9 +432,8 @@ router.post("/project/create", async (req, res) => {
 
           for (const imageFile of imageFilesArray) {
             if (imageFile && imageFile.filepath) {
-              const imageFilename = `${Date.now()}-${
-                imageFile.originalFilename
-              }`;
+              const imageFilename = `${Date.now()}-${imageFile.originalFilename
+                }`;
               const imagePath = path.join(form.uploadDir, imageFilename);
 
               try {
@@ -465,16 +464,16 @@ router.post("/project/create", async (req, res) => {
             fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
           )
             ? fields[
-                `section[${sectionIndex}][points][${pointIndex}][title]`
-              ][0]
+            `section[${sectionIndex}][points][${pointIndex}][title]`
+            ][0]
             : fields[`section[${sectionIndex}][points][${pointIndex}][title]`];
 
           const pointDetail = Array.isArray(
             fields[`section[${sectionIndex}][points][${pointIndex}][detail]`]
           )
             ? fields[
-                `section[${sectionIndex}][points][${pointIndex}][detail]`
-              ][0]
+            `section[${sectionIndex}][points][${pointIndex}][detail]`
+            ][0]
             : fields[`section[${sectionIndex}][points][${pointIndex}][detail]`];
 
           if (pointTitle && pointDetail) {
@@ -645,7 +644,7 @@ router.post("/project/edit", async (req, res) => {
       // Validate related products exist (if any provided)
       if (relatedProducts.length > 0) {
         for (const productId of relatedProducts) {
-          const productExists = await Product.findById(productId);
+          const productExists = await ParentService.findById(productId);
           if (!productExists) {
             return res.status(400).json({
               success: false,
@@ -783,21 +782,21 @@ router.post("/project/edit", async (req, res) => {
               fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
             )
               ? fields[
-                  `section[${sectionIndex}][points][${pointIndex}][title]`
-                ][0]
+              `section[${sectionIndex}][points][${pointIndex}][title]`
+              ][0]
               : fields[
-                  `section[${sectionIndex}][points][${pointIndex}][title]`
-                ];
+              `section[${sectionIndex}][points][${pointIndex}][title]`
+              ];
 
             const pointDetail = Array.isArray(
               fields[`section[${sectionIndex}][points][${pointIndex}][detail]`]
             )
               ? fields[
-                  `section[${sectionIndex}][points][${pointIndex}][detail]`
-                ][0]
+              `section[${sectionIndex}][points][${pointIndex}][detail]`
+              ][0]
               : fields[
-                  `section[${sectionIndex}][points][${pointIndex}][detail]`
-                ];
+              `section[${sectionIndex}][points][${pointIndex}][detail]`
+              ];
 
             if (pointTitle && pointDetail) {
               points.push({
@@ -947,97 +946,34 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
       type,
       title,
       description,
-      points,
+      contents,
       relatedService,
       relatedIndustries,
     } = req.body;
     const image = req.file ? getImageUrl(req.file.filename) : null;
 
     // Check required fields
-    if (!type || !title || !description || !image) {
+    if (!type || !title || !description || !contents || !image) {
       return res.status(400).json({
         success: false,
-        message: "Type, title, description, and image are required fields",
+        message: "Type, title, description, contents, and image are required fields",
       });
     }
 
-    // Parse points if it's sent as a JSON string
-    let parsedPoints = [];
-    try {
-      parsedPoints = typeof points === "string" ? JSON.parse(points) : points;
-
-      // Validate points structure
-      if (!Array.isArray(parsedPoints)) {
-        return res.status(400).json({
-          success: false,
-          message: "Points must be an array",
-        });
-      }
-
-      // Validate each point's structure
-      for (const point of parsedPoints) {
-        if (!point.title) {
-          return res.status(400).json({
-            success: false,
-            message: "Each point must have a title",
-          });
-        }
-
-        if (
-          !point.explanationType ||
-          !["article", "bullets"].includes(point.explanationType)
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Each point must have a valid explanationType (article or bullets)",
-          });
-        }
-
-        // Validate based on explanationType
-        if (point.explanationType === "article" && !point.article) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Points with 'article' explanationType must include article content",
-          });
-        }
-
-        if (point.explanationType === "bullets") {
-          if (!Array.isArray(point.bullets) || point.bullets.length === 0) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Points with 'bullets' explanationType must include at least one bullet point",
-            });
-          }
-
-          // Validate each bullet
-          for (const bullet of point.bullets) {
-            if (
-              !bullet.style ||
-              !["number", "dot", "roman"].includes(bullet.style)
-            ) {
-              return res.status(400).json({
-                success: false,
-                message:
-                  "Each bullet must have a valid style (number, dot, or roman)",
-              });
-            }
-            if (!bullet.content) {
-              return res.status(400).json({
-                success: false,
-                message: "Each bullet must have content",
-              });
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error parsing points:", error);
+    // Validate that contents is a string (HTML content)
+    if (typeof contents !== "string") {
       return res.status(400).json({
         success: false,
-        message: "Invalid points format",
+        message: "Contents must be a string (HTML content)",
+      });
+    }
+
+    // Basic validation for non-empty contents (after stripping HTML tags)
+    const textContent = contents.replace(/<[^>]*>/g, '').trim();
+    if (textContent.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Contents cannot be empty",
       });
     }
 
@@ -1046,7 +982,7 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
       image,
       title,
       description,
-      points: parsedPoints,
+      contents,
       relatedService: relatedService || null,
       relatedIndustries: relatedIndustries || null,
     });
@@ -1074,7 +1010,7 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
       type,
       title,
       description,
-      points,
+      contents,
       relatedService,
       relatedIndustries,
     } = req.body;
@@ -1120,88 +1056,26 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
       blog.image = getImageUrl(req.file.filename);
     }
 
-    // Handle points update if provided
-    if (points) {
-      try {
-        const parsedPoints =
-          typeof points === "string" ? JSON.parse(points) : points;
-
-        // Validate points structure
-        if (!Array.isArray(parsedPoints)) {
-          return res.status(400).json({
-            success: false,
-            message: "Points must be an array",
-          });
-        }
-
-        // Validate each point's structure
-        for (const point of parsedPoints) {
-          if (!point.title) {
-            return res.status(400).json({
-              success: false,
-              message: "Each point must have a title",
-            });
-          }
-
-          if (
-            !point.explanationType ||
-            !["article", "bullets"].includes(point.explanationType)
-          ) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Each point must have a valid explanationType (article or bullets)",
-            });
-          }
-
-          // Validate based on explanationType
-          if (point.explanationType === "article" && !point.article) {
-            return res.status(400).json({
-              success: false,
-              message:
-                "Points with 'article' explanationType must include article content",
-            });
-          }
-
-          if (point.explanationType === "bullets") {
-            if (!Array.isArray(point.bullets) || point.bullets.length === 0) {
-              return res.status(400).json({
-                success: false,
-                message:
-                  "Points with 'bullets' explanationType must include at least one bullet point",
-              });
-            }
-
-            // Validate each bullet
-            for (const bullet of point.bullets) {
-              if (
-                !bullet.style ||
-                !["number", "dot", "roman"].includes(bullet.style)
-              ) {
-                return res.status(400).json({
-                  success: false,
-                  message:
-                    "Each bullet must have a valid style (number, dot, or roman)",
-                });
-              }
-              if (!bullet.content) {
-                return res.status(400).json({
-                  success: false,
-                  message: "Each bullet must have content",
-                });
-              }
-            }
-          }
-        }
-
-        blog.points = parsedPoints;
-      } catch (error) {
-        console.error("Error parsing points:", error);
+    // Handle contents update if provided
+    if (contents !== undefined) {
+      // Validate that contents is a string (HTML content)
+      if (typeof contents !== "string") {
         return res.status(400).json({
           success: false,
-          message: "Invalid points format",
+          message: "Contents must be a string (HTML content)",
         });
       }
+
+      // Basic validation for non-empty contents (after stripping HTML tags)
+      const textContent = contents.replace(/<[^>]*>/g, '').trim();
+      if (textContent.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Contents cannot be empty",
+        });
+      }
+
+      blog.contents = contents;
     }
 
     await blog.save();
@@ -1255,27 +1129,6 @@ router.post("/blog/delete", async (req, res) => {
       } catch (err) {
         console.error("Error deleting blog image file:", err);
         // Continue with deletion even if image removal fails
-      }
-    }
-
-    // Delete any point images if they exist
-    if (blog.points && blog.points.length > 0) {
-      for (const point of blog.points) {
-        if (point.image && typeof point.image === "string") {
-          const pointImagePath = path.join(
-            process.cwd(),
-            "public",
-            point.image.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(pointImagePath)) {
-              fs.unlinkSync(pointImagePath);
-            }
-          } catch (err) {
-            console.error("Error deleting point image file:", err);
-            // Continue with deletion even if image removal fails
-          }
-        }
       }
     }
 

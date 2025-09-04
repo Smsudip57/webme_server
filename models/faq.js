@@ -18,12 +18,12 @@ const faqSchema = new mongoose.Schema({
     }],
     relatedProducts: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product'
-      }],
-      relatedChikfdServices: [{
+        ref: 'Parentservice'
+    }],
+    relatedChikfdServices: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'ChildService'
-      }],
+        ref: 'Childservices'
+    }],
 }, { timestamps: true });
 
 const Faq = mongoose.models.Faq || mongoose.model("Faq", faqSchema);

@@ -97,11 +97,11 @@ const ArticleSchema = new mongoose.Schema({
   }],
   relatedProducts: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product'
+    ref: 'Parentservice'
   }],
   relatedChikfdServices: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'ChildService'
+    ref: 'Childservices'
   }],
   status: {
     type: String,

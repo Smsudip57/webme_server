@@ -5,8 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const User = require("../models/user");
 const Service = require("../models/service");
-const Product = require("../models/product");
-const ChildService = require("../models/chikdService");
+const ParentService = require("../models/Parentservice");
+const ChildService = require("../models/childService");
 const Project = require("../models/project");
 const Testimonial = require("../models/testimonial");
 const Industry = require("../models/industry");
@@ -97,7 +97,7 @@ router.get("/industry/get", async (req, res) => {
 router.get("/product/get", async (req, res) => {
   try {
     // Step 4: Fetch all products from the database
-    const products = await Product.find(); // Add filters or pagination if needed
+    const products = await ParentService.find(); // Add filters or pagination if needed
 
     if (products.length === 0) {
       return res
@@ -291,7 +291,7 @@ router.get("/search", async (req, res) => {
       }),
 
       // Search in products
-      Product.find({
+      ParentService.find({
         $or: [
           { Title: { $regex: search, $options: "i" } },
           { detail: { $regex: search, $options: "i" } },
@@ -359,7 +359,7 @@ router.get("/get/bulk", async (req, res) => {
       projects: () => Project.find({}),
       industries: () => Industry.find({}).populate("relatedService"),
       testimonials: () => Testimonial.find().populate("relatedService"),
-      products: () => Product.find({}),
+      products: () => ParentService.find({}),
       childServices: () => ChildService.find({}),
       blogs: () => Blog.find({}),
       knowledgebase: () => KnowledgeBase.find().populate("relatedServices"),
@@ -392,6 +392,7 @@ router.get("/get/bulk", async (req, res) => {
 
     // Execute all queries in parallel
     const results = await Promise.all(promises);
+    // console.log(results?.find(item => item?.key ==="products")?.data?.find(item=> item?.Title ==="Custom eCommerce Mobile App Development"));  
 
     // Transform results into a clean object
     const responseData = {};
