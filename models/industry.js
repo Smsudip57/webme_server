@@ -7,7 +7,7 @@ const industrySchema = new mongoose.Schema(
       required: [true, 'Title is required'],
       trim: true,
     },
-    Heading:{
+    Heading: {
       type: String,
       required: [true, 'Title is required'],
       trim: true,
@@ -25,20 +25,36 @@ const industrySchema = new mongoose.Schema(
       type: String,
       required: [true, 'Image is required'],
     },
-    Efficiency:{
-        type: Number
+    Efficiency: {
+      type: Number
     },
-    costSaving:{
-        type: Number
+    costSaving: {
+      type: Number
     },
-    relatedService:[{
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Service'
-        }],
-    customerSatisfaction:{
-        type: Number
+    relatedServices: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service'
+    }],
+    relatedSuccessStory: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Testimonial'
+    }],
+    relatedProducts: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Parentservice'
+    }],
+    relatedChikfdServices: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Childservices'
+    }],
+    relatedProjects: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Project'
+    }],
+    customerSatisfaction: {
+      type: Number
     },
-}
+  }
 );
 
 const Industry = mongoose.models.Industry || mongoose.model('Industry', industrySchema);

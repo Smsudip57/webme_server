@@ -79,7 +79,12 @@ router.get("/testimonial/get", async (req, res) => {
 
 router.get("/industry/get", async (req, res) => {
   try {
-    const industries = await Industry.find({}).populate("relatedService");
+    const industries = await Industry.find({})
+      .populate("relatedServices")
+      .populate("relatedSuccessStory")
+      .populate("relatedProducts")
+      .populate("relatedChikfdServices")
+      .populate("relatedProjects");
 
     return res.status(200).json({
       success: true,
@@ -357,7 +362,11 @@ router.get("/get/bulk", async (req, res) => {
     const dataSources = {
       services: () => Service.find({}),
       projects: () => Project.find({}),
-      industries: () => Industry.find({}).populate("relatedService"),
+      industries: () => Industry.find({}).populate("relatedServices")
+        .populate("relatedSuccessStory")
+        .populate("relatedProducts")
+        .populate("relatedChikfdServices")
+        .populate("relatedProjects"),
       testimonials: () => Testimonial.find().populate("relatedService"),
       products: () => ParentService.find({}),
       childServices: () => ChildService.find({}),

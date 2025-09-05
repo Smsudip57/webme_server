@@ -225,7 +225,11 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
-        relatedService,
+        relatedServices,
+        relatedSuccessStory,
+        relatedProducts,
+        relatedChikfdServices,
+        relatedProjects,
       } = req.body;
 
       const files = req.files; // Access uploaded files
@@ -241,38 +245,39 @@ router.post(
       const imageUrl = getImageUrl(image.filename);
       const logoUrl = getImageUrl(logo.filename);
 
-      // Process relatedService as array
-      let relatedServiceArray = [];
-      if (relatedService) {
+      // Helper function to parse related items
+      const parseRelatedItems = (items) => {
+        if (!items) return [];
+
         // If it's a string that could be JSON
-        if (
-          typeof relatedService === "string" &&
-          relatedService.startsWith("[")
-        ) {
+        if (typeof items === "string" && items.startsWith("[")) {
           try {
-            relatedServiceArray = JSON.parse(relatedService);
+            return JSON.parse(items);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            relatedServiceArray = relatedService
-              .split(",")
-              .map((id) => id.trim());
+            return items.split(",").map((id) => id.trim()).filter(id => id);
           }
         }
         // If it's a comma-separated string
-        else if (typeof relatedService === "string") {
-          relatedServiceArray = relatedService
-            .split(",")
-            .map((id) => id.trim());
+        else if (typeof items === "string") {
+          return items.split(",").map((id) => id.trim()).filter(id => id);
         }
-        // If it's already an array (from middleware)
-        else if (Array.isArray(relatedService)) {
-          relatedServiceArray = relatedService;
+        // If it's already an array
+        else if (Array.isArray(items)) {
+          return items;
         }
         // If it's a single ID
         else {
-          relatedServiceArray = [relatedService];
+          return [items];
         }
-      }
+      };
+
+      // Process all related items arrays
+      const relatedServicesArray = parseRelatedItems(relatedServices);
+      const relatedSuccessStoryArray = parseRelatedItems(relatedSuccessStory);
+      const relatedProductsArray = parseRelatedItems(relatedProducts);
+      const relatedChikfdServicesArray = parseRelatedItems(relatedChikfdServices);
+      const relatedProjectsArray = parseRelatedItems(relatedProjects);
 
       const newIndustry = new Industry({
         Title,
@@ -283,7 +288,11 @@ router.post(
         customerSatisfaction: Number(customerSatisfaction) || 0,
         image: imageUrl,
         logo: logoUrl,
-        relatedService: relatedServiceArray,
+        relatedServices: relatedServicesArray,
+        relatedSuccessStory: relatedSuccessStoryArray,
+        relatedProducts: relatedProductsArray,
+        relatedChikfdServices: relatedChikfdServicesArray,
+        relatedProjects: relatedProjectsArray,
       });
 
       await newIndustry.save();
@@ -319,7 +328,11 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
-        relatedService,
+        relatedServices,
+        relatedSuccessStory,
+        relatedProducts,
+        relatedChikfdServices,
+        relatedProjects,
       } = req.body;
 
       if (!id || !Title || !Heading || !detail) {
@@ -382,38 +395,39 @@ router.post(
         }
       }
 
-      // Process relatedService as array
-      let relatedServiceArray = industry.relatedService || []; // Default to existing array
-      if (relatedService) {
+      // Helper function to parse related items
+      const parseRelatedItems = (items, existingItems = []) => {
+        if (!items) return existingItems;
+
         // If it's a string that could be JSON
-        if (
-          typeof relatedService === "string" &&
-          relatedService.startsWith("[")
-        ) {
+        if (typeof items === "string" && items.startsWith("[")) {
           try {
-            relatedServiceArray = JSON.parse(relatedService);
+            return JSON.parse(items);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            relatedServiceArray = relatedService
-              .split(",")
-              .map((id) => id.trim());
+            return items.split(",").map((id) => id.trim()).filter(id => id);
           }
         }
         // If it's a comma-separated string
-        else if (typeof relatedService === "string") {
-          relatedServiceArray = relatedService
-            .split(",")
-            .map((id) => id.trim());
+        else if (typeof items === "string") {
+          return items.split(",").map((id) => id.trim()).filter(id => id);
         }
-        // If it's already an array (from middleware)
-        else if (Array.isArray(relatedService)) {
-          relatedServiceArray = relatedService;
+        // If it's already an array
+        else if (Array.isArray(items)) {
+          return items;
         }
         // If it's a single ID
         else {
-          relatedServiceArray = [relatedService];
+          return [items];
         }
-      }
+      };
+
+      // Process all related items arrays with existing values as defaults
+      const relatedServicesArray = parseRelatedItems(relatedServices, industry.relatedServices);
+      const relatedSuccessStoryArray = parseRelatedItems(relatedSuccessStory, industry.relatedSuccessStory);
+      const relatedProductsArray = parseRelatedItems(relatedProducts, industry.relatedProducts);
+      const relatedChikfdServicesArray = parseRelatedItems(relatedChikfdServices, industry.relatedChikfdServices);
+      const relatedProjectsArray = parseRelatedItems(relatedProjects, industry.relatedProjects);
 
       // Update fields
       industry.Title = Title;
@@ -425,8 +439,13 @@ router.post(
         industry.customerSatisfaction = Number(customerSatisfaction);
       industry.image = imageUrl;
       industry.logo = logoUrl;
-      // Update relatedService if provided
-      industry.relatedService = relatedServiceArray;
+
+      // Update all related items arrays
+      industry.relatedServices = relatedServicesArray;
+      industry.relatedSuccessStory = relatedSuccessStoryArray;
+      industry.relatedProducts = relatedProductsArray;
+      industry.relatedChikfdServices = relatedChikfdServicesArray;
+      industry.relatedProjects = relatedProjectsArray;
 
       await industry.save();
 
