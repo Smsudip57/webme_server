@@ -11,7 +11,7 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, UPLOAD_DIR); 
+    cb(null, UPLOAD_DIR);
   },
   filename: function (req, file, cb) {
     cb(null, Date.now() + "-" + file.originalname);
@@ -53,11 +53,11 @@ const auth = async (req, res, next) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
-    
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({
@@ -65,7 +65,7 @@ router.post('/login', async (req, res) => {
         message: 'Invalid email or password.',
       });
     }
-    
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -73,15 +73,16 @@ router.post('/login', async (req, res) => {
         message: 'Invalid email or password.',
       });
     }
-    
+
     user.password = undefined;
-    
+
     const token = jwt.sign({ userId: user._id }, JWT_SECRET);
     res.cookie('user', token, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', // Allow same-site cross-subdomain requests
       path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.webmedigital.com' : undefined, // Share cookie across subdomains
     });
 
     return res.status(200).json({
@@ -136,9 +137,10 @@ router.post('/register', async (req, res) => {
 
     res.cookie('user', token, {
       httpOnly: true,
-      secure: false,
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', // Allow same-site cross-subdomain requests
       path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.webmedigital.com' : undefined, // Share cookie across subdomains
     });
 
     return res.status(201).json({
@@ -163,7 +165,7 @@ router.get('/getuserinfo', async (req, res) => {
         error: 'Authentication token is missing.',
       });
     }
-    
+
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
@@ -197,162 +199,163 @@ router.get('/getuserinfo', async (req, res) => {
 
 
 router.get('/user/logout', (req, res) => {
-    try {
-      // Clear the 'user' cookie by setting its value to an empty string
-      res.cookie('user', '', {
-        httpOnly: true, // Prevents client-side JS access
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-        sameSite: 'strict', // Protects against CSRF
-        path: '/', // Cookie available to all routes
-        expires: new Date(0), // Set the cookie expiration date to the past to remove it
-      });
-  
-      return res.status(200).json({
-        success: true,
-        message: 'Logout successful.',
-      });
-    } catch (error) {
-      console.error('Error during logout:', error);
-      return res.status(500).json({ error: 'An error occurred during logout.' });
+  try {
+    // Clear the 'user' cookie by setting its value to an empty string
+    res.cookie('user', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', // Allow same-site cross-subdomain requests
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.webmedigital.com' : undefined, // Share cookie across subdomains
+      expires: new Date(0), // Set the cookie expiration date to the past to remove it
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logout successful.',
+    });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    return res.status(500).json({ error: 'An error occurred during logout.' });
+  }
+});
+
+
+
+router.post('/user/book', async (req, res) => {
+  try {
+    const { serviceId, userId, time } = req.body;
+
+    // Validate required fields
+    if (!serviceId || !userId || !time) {
+      return res.status(400).json({ error: 'Service ID, User ID, and Time are required.' });
     }
-  });
 
-
-
-  router.post('/user/book', async (req, res) => {
-    try {
-      const { serviceId, userId, time } = req.body;
-  
-      // Validate required fields
-      if (!serviceId || !userId || !time) {
-        return res.status(400).json({ error: 'Service ID, User ID, and Time are required.' });
-      }
-  
-      // Validate the time format
-      const bookingTime = new Date(time);
-      if (isNaN(bookingTime.getTime())) {
-        return res.status(400).json({ error: 'Invalid time format.' });
-      }
-  
-      // Find the user and service
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found.' });
-      }
-  
-      const service = await Service.findById(serviceId);
-      if (!service) {
-        return res.status(404).json({ error: 'Service not found.' });
-      }
-  
-      // Check if the user already has a booking for the same service and time
-      const existingBooking = user.booking.find(
-        (booking) =>
-          booking.service.toString() === service._id.toString()
-      );
-  
-      if (existingBooking) {
-        return res.status(400).json({ error: 'User already has a booking for this service at the selected time.' });
-      }
-  
-      // Add the new booking
-      user.booking.push({ service: service._id, time: bookingTime });
-      await user.save();
-  
-      return res.status(200).json({ message: 'Booking successful.' });
-    } catch (error) {
-      console.error('Error during booking:', error);
-      return res.status(500).json({ error: 'An error occurred during booking.' });
+    // Validate the time format
+    const bookingTime = new Date(time);
+    if (isNaN(bookingTime.getTime())) {
+      return res.status(400).json({ error: 'Invalid time format.' });
     }
-  });
-  
-  
-  
-  router.post('/user/cancelbook', async (req, res) => {
-    try {
-      const { serviceId, userId } = req.body;
-  
-      // Validate required fields
-      if (!serviceId || !userId) {
-        return res.status(400).json({ error: 'Service ID, User ID, and Time are required.' });
-      }
-  
-  
-      // Find the user and service
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found.' });
-      }
-  
-      // Check if the user already has a booking for the same service and time
-      const updatedBooking = user.booking.filter(
-        (booking) =>
-          booking.service.toString() !== serviceId.toString()
-      );
-  
-      // Add the new booking
-      user.booking = updatedBooking
-      await user.save();
-      return res.status(200).json({ message: 'Booking Canceled!' });
-    } catch (error) {
-      console.error('Error during booking:', error);
-      return res.status(500).json({ error: 'An error occurred during booking.' });
+
+    // Find the user and service
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
     }
-  });
 
-
-
-  router.put("/user/update",auth, upload.fields([{ name: "profilePhoto" }, { name: "companyLogo" }]), async (req, res) => {
-    try {
-      const {_id: userId} = req.user
-      const {  name, phoneNumber, address, companyRole, companyName, newPassword, oldPassword } = req.body;
-  
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ success: false, message: "User not found" });
-      }
-  
-      if (!oldPassword) {
-        return res.status(400).json({ success: false, message: "Password is required" });
-      }
-      const isMatch = await bcrypt.compare(oldPassword, user.password);
-      if (!isMatch) {
-        return res.status(400).json({ success: false, message: "Incorrect password" });
-      }
-
-      if (newPassword) {
-        user.password = await bcrypt.hash(newPassword, 10);
-      }
-  
-
-      user.profile.name = name || user.profile.name;
-      user.profile.phoneNumber = phoneNumber || user.profile.phoneNumber;
-      user.profile.address = address || user.profile.address;
-      user.profile.companyRole = companyRole || user.profile.companyRole;
-      user.profile.companyName = companyName || user.profile.companyName;
-  
-      
-      if (req.files["profilePhoto"]) {
-        user.profile.avatarUrl = `${process.env.Current_Url}/${req.files["profilePhoto"][0].filename}`;
-      }
-      if (req.files["companyLogo"]) {
-        user.profile.companyImageUrl = `${process.env.Current_Url}/${req.files["companyLogo"][0].filename}`;
-      }
-  
-
-      await user.save();
-  
-      return res.status(200).json({
-        success: true,
-        message: "Profile updated successfully",
-        user,
-      });
-  
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ success: false, message: "Server error", error: error.message });
+    const service = await Service.findById(serviceId);
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found.' });
     }
-  });
+
+    // Check if the user already has a booking for the same service and time
+    const existingBooking = user.booking.find(
+      (booking) =>
+        booking.service.toString() === service._id.toString()
+    );
+
+    if (existingBooking) {
+      return res.status(400).json({ error: 'User already has a booking for this service at the selected time.' });
+    }
+
+    // Add the new booking
+    user.booking.push({ service: service._id, time: bookingTime });
+    await user.save();
+
+    return res.status(200).json({ message: 'Booking successful.' });
+  } catch (error) {
+    console.error('Error during booking:', error);
+    return res.status(500).json({ error: 'An error occurred during booking.' });
+  }
+});
+
+
+
+router.post('/user/cancelbook', async (req, res) => {
+  try {
+    const { serviceId, userId } = req.body;
+
+    // Validate required fields
+    if (!serviceId || !userId) {
+      return res.status(400).json({ error: 'Service ID, User ID, and Time are required.' });
+    }
+
+
+    // Find the user and service
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    // Check if the user already has a booking for the same service and time
+    const updatedBooking = user.booking.filter(
+      (booking) =>
+        booking.service.toString() !== serviceId.toString()
+    );
+
+    // Add the new booking
+    user.booking = updatedBooking
+    await user.save();
+    return res.status(200).json({ message: 'Booking Canceled!' });
+  } catch (error) {
+    console.error('Error during booking:', error);
+    return res.status(500).json({ error: 'An error occurred during booking.' });
+  }
+});
+
+
+
+router.put("/user/update", auth, upload.fields([{ name: "profilePhoto" }, { name: "companyLogo" }]), async (req, res) => {
+  try {
+    const { _id: userId } = req.user
+    const { name, phoneNumber, address, companyRole, companyName, newPassword, oldPassword } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (!oldPassword) {
+      return res.status(400).json({ success: false, message: "Password is required" });
+    }
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: "Incorrect password" });
+    }
+
+    if (newPassword) {
+      user.password = await bcrypt.hash(newPassword, 10);
+    }
+
+
+    user.profile.name = name || user.profile.name;
+    user.profile.phoneNumber = phoneNumber || user.profile.phoneNumber;
+    user.profile.address = address || user.profile.address;
+    user.profile.companyRole = companyRole || user.profile.companyRole;
+    user.profile.companyName = companyName || user.profile.companyName;
+
+
+    if (req.files["profilePhoto"]) {
+      user.profile.avatarUrl = `${process.env.Current_Url}/${req.files["profilePhoto"][0].filename}`;
+    }
+    if (req.files["companyLogo"]) {
+      user.profile.companyImageUrl = `${process.env.Current_Url}/${req.files["companyLogo"][0].filename}`;
+    }
+
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user,
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+});
 
 
 
