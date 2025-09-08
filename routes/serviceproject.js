@@ -1709,7 +1709,7 @@ router.post(
   async (req, res) => {
     try {
       const uploadedFiles = req.files.map(
-        (file) => `${process.env.CURRENT_URL}/public/${file.filename}`
+        (file) => `${process.env.Current_Url}/${file.filename}`
       );
 
       const parsedSections = JSON.parse(req.body.sections);
@@ -1720,6 +1720,15 @@ router.post(
           image: uploadedFiles[index] || section.image,
         };
       });
+
+      const existingDetails = await ServiceDetails.find({
+        relatedServices: req.body.relatedServices,
+      });
+      if (existingDetails && existingDetails.length > 0) {
+        await ServiceDetails.deleteMany({
+          relatedServices: req.body.relatedServices,
+        });
+      }
 
       const serviceDetails = new ServiceDetails({
         relatedServices: req.body.relatedServices,
