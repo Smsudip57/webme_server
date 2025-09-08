@@ -3,6 +3,7 @@ const multer = require("multer");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
 const User = require("../models/user");
 const Service = require("../models/service");
 const ParentService = require("../models/Parentservice");
@@ -1721,24 +1722,40 @@ router.post(
         };
       });
 
+
+      if (!req.body.relatedServices) {
+        return res.status(400).json({
+          success: false,
+          error: "relatedServices is required",
+        });
+      }
+
+      const relatedServiceId = typeof req.body.relatedServices === 'string'
+        ? new mongoose.Types.ObjectId(req.body.relatedServices)
+        : req.body.relatedServices;
+
+
+        
       const existingDetails = await ServiceDetails.find({
-        relatedServices: req.body.relatedServices,
+        relatedServices: relatedServiceId,
       });
+
+
       if (existingDetails && existingDetails.length > 0) {
-        await ServiceDetails.deleteMany({
-          relatedServices: req.body.relatedServices,
+        const deleteResult = await ServiceDetails.deleteMany({
+          relatedServices: relatedServiceId,
         });
       }
 
       const serviceDetails = new ServiceDetails({
-        relatedServices: req.body.relatedServices,
+        relatedServices: relatedServiceId,
         description: req.body.description,
         sections: sectionsWithImages,
       });
 
       const savedServiceDetail = await serviceDetails.save();
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: savedServiceDetail,
       });
