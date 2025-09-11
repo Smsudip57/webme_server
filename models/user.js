@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -6,88 +6,67 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
     lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please use a valid email address.']
+    match: [/^\S+@\S+\.\S+$/, "Please use a valid email address."],
   },
   password: {
     type: String,
     required: true,
-    minlength: 6
+    minlength: 6,
   },
   role: {
     type: String,
-    enum: ['vendor','user', 'admin', 'freelancer'],
-    default: 'user'
+    enum: ["vendor", "user", "admin", "freelancer"],
+    default: "user",
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
   },
   profile: {
     name: {
       type: String,
-      trim: true
+      trim: true,
     },
-    phoneNumber:{
+    phoneNumber: {
       type: String,
-      trim: true
+      trim: true,
     },
     address: {
       type: String,
-      trim: true
+      trim: true,
     },
     companyRole: {
       type: String,
-      maxlength: 300
+      maxlength: 300,
     },
     avatarUrl: {
       type: String,
-      default: 'https://default-avatar-url.com'
+      default: "",
     },
     companyImageUrl: {
       type: String,
-      default: 'https://default-avatar-url.com'
+      default: "",
     },
     companyName: {
       type: String,
-      trim: true
+      trim: true,
     },
   },
-  payment:{
-    status: {
-      type: String,
-      enum: ['paid', 'unpaid'],
-      default: 'unpaid'
-    },
-    transactionId: {
-      type: String,
-    }
+  isSuspended: {
+    type: Boolean,
+    default: false,
   },
-  boughtServices: [
-    {
-    type: [mongoose.Schema.Types.ObjectId],
-    ref: 'Service'
-  }
- ],
- booking:[
-  {
-    service: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Service'
-    },
-    time: {
-      type: Date,
-      required: [true, 'Time is required'],
-    }
-  }
- ],
- isActive: {
-   type: Boolean,
-   default: false
- }
+  isActive: {
+    type: Boolean,
+    default: false,
+  },
+  isApproved: {
+    type: String,
+    enum: ["approved", "pending", "rejected"],
+    default: "pending",
+  },
 });
 
-
-
-const User = mongoose.models.User || mongoose.model('User', userSchema);
+const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 module.exports = User;
