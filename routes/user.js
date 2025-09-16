@@ -1598,4 +1598,41 @@ router.delete("/admin/availability/:availabilityId", auth, async (req, res) => {
   }
 });
 
+//subscribe to newsletter
+router.post("/subscribe", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validate email with regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is invalid" });
+    }
+
+    // Send data to ERP system
+    const erpResponse = await fetch(`https://erp.webmedigital.com/newsletter`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+      },
+      body: JSON.stringify({
+        email: email.toLowerCase().trim(),
+      }),
+    });
+    if (!erpResponse.ok) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to subscribe to newsletter",
+      });
+    }
+
+    return  res.status(201).json({ success: true, message: "Subscribed successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 module.exports = router;
