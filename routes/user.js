@@ -144,6 +144,27 @@ router.post("/register", async (req, res) => {
     const token = jwt.sign({ userId: newUser._id }, JWT_SECRET);
     newUser.password = undefined;
 
+    // Send user data to ERP system after successful registration (only if role is 'user')
+    if (newUser.role === "user") {
+      try {
+        // Send all user fields except password
+        const { password, ...userDataForERP } = newUser.toObject
+          ? newUser.toObject()
+          : newUser;
+        await fetch("https://erp.webmedigital.com/user/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+          },
+          body: JSON.stringify(userDataForERP),
+        });
+      } catch (erpError) {
+        console.error("Failed to send user to ERP system:", erpError);
+        // Do not block registration if ERP call fails
+      }
+    }
+
     res.cookie("user", token, {
       httpOnly: false,
       secure: false,
@@ -873,6 +894,25 @@ router.put(
       }
 
       await user.save();
+
+      // Send updated user data to ERP system (only if role is 'user')
+      if (user.role === "user") {
+        try {
+          const { password, ...userDataForERP } = user.toObject
+            ? user.toObject()
+            : user;
+          await fetch("https://erp.webmedigital.com/user/update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+            },
+            body: JSON.stringify(userDataForERP),
+          });
+        } catch (erpError) {
+          console.error("Failed to send updated user to ERP system:", erpError);
+        }
+      }
 
       return res.status(200).json({
         success: true,
@@ -1629,9 +1669,13 @@ router.post("/subscribe", async (req, res) => {
       });
     }
 
-    return  res.status(201).json({ success: true, message: "Subscribed successfully" });
+    return res
+      .status(201)
+      .json({ success: true, message: "Subscribed successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 });
 

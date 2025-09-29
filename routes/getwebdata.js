@@ -443,54 +443,5 @@ router.get("/get/bulk", async (req, res) => {
 })
 
 
-//endpoints for erp, seperate from this project
-router.get("/get/users", async (req, res) => {
-  try {
-    const TargetHeader = req.headers['erp-secret-key'];
-    if (!TargetHeader || TargetHeader !== process.env.ERP_COMMUNICATION_SECRET_KEY) {
-      return res.status(403).json({
-        success: false,
-        message: "Invalid Endpoint"
-      });
-    }
-    const users = await User.find().select('-password');
-    return res.status(200).json({
-      success: true,
-      users,
-    });
-
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-});
-router.get("/get/products", async (req, res) => {
-  try {
-    const TargetHeader = req.headers['erp-secret-key'];
-    if (!TargetHeader || TargetHeader !== process.env.ERP_COMMUNICATION_SECRET_KEY) {
-      return res.status(403).json({
-        success: false,
-        message: "Invalid Endpoint"
-      });
-    }
-    const products = await ChildService.find().select('-category');
-    return res.status(200).json({
-      success: true,
-      products,
-    });
-
-  } catch (error) {
-    console.error("Error fetching products:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-});
 
 module.exports = router;
