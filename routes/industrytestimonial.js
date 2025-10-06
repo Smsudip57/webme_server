@@ -964,7 +964,7 @@ router.post(
       }
 
       // Check if slug already exists
-      const existingChildService = await ParentService.findOne({ slug });
+      const existingChildService = await ChildService.findOne({ slug });
       if (existingChildService) {
         return res.status(400).json({
           success: false,
@@ -1064,7 +1064,7 @@ router.post(
       });
 
       // Create child service with processed data
-      const newChildService = new ParentService({
+      const newChildService = new ChildService({
         Title,
         detail,
         moreDetail,
@@ -1120,7 +1120,7 @@ router.post("/child/delete", async (req, res) => {
       });
     }
 
-    const product = await ParentService.findById(productId);
+    const product = await ChildService.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -1163,11 +1163,7 @@ router.post("/child/delete", async (req, res) => {
     await Promise.allSettled(fileDeleteOperations);
 
     // Delete the product from the database
-    
-    // Delete all child services that reference this parent product
-    await ChildService.deleteMany({ category: productId });
-    
-    await ParentService.findByIdAndDelete(productId);
+    await ChildService.findByIdAndDelete(productId);
 
     // Return success response
     return res.status(200).json({
