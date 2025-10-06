@@ -732,10 +732,14 @@ router.post("/product/delete", async (req, res) => {
       }
     }
     await Promise.allSettled(fileDeleteOperations);
-    await Product.findByIdAndDelete(productId);
+    
+    // Delete all child services that reference this parent product
+    await ChildService.deleteMany({ category: productId });
+    
+    await ParentService.findByIdAndDelete(productId);
     return res.status(200).json({
       success: true,
-      message: "Product and all associated images deleted successfully",
+      message: "Product, all child services, and all associated images deleted successfully",
     });
   } catch (err) {
     console.error("Error deleting product:", err);
@@ -960,7 +964,7 @@ router.post(
       }
 
       // Check if slug already exists
-      const existingChildService = await ChildService.findOne({ slug });
+      const existingChildService = await ParentService.findOne({ slug });
       if (existingChildService) {
         return res.status(400).json({
           success: false,
@@ -1060,7 +1064,7 @@ router.post(
       });
 
       // Create child service with processed data
-      const newChildService = new ChildService({
+      const newChildService = new ParentService({
         Title,
         detail,
         moreDetail,
@@ -1116,7 +1120,7 @@ router.post("/child/delete", async (req, res) => {
       });
     }
 
-    const product = await ChildService.findById(productId);
+    const product = await ParentService.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -1159,7 +1163,11 @@ router.post("/child/delete", async (req, res) => {
     await Promise.allSettled(fileDeleteOperations);
 
     // Delete the product from the database
-    await ChildService.findByIdAndDelete(productId);
+    
+    // Delete all child services that reference this parent product
+    await ChildService.deleteMany({ category: productId });
+    
+    await ParentService.findByIdAndDelete(productId);
 
     // Return success response
     return res.status(200).json({
