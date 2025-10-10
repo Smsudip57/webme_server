@@ -1078,6 +1078,19 @@ router.post(
       // Save to database
       await newChildService.save();
 
+      try {
+        await fetch("https://erp.webmedigital.com/product/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+          },
+          body: JSON.stringify(newChildService.toObject()),
+        });
+      } catch (erpError) {
+        console.error("Failed to send user to ERP system:", erpError);
+      }
+
       return res.status(201).json({
         success: true,
         message: "Child service created successfully",
@@ -1164,6 +1177,19 @@ router.post("/child/delete", async (req, res) => {
 
     // Delete the product from the database
     await ChildService.findByIdAndDelete(productId);
+
+     try {
+        await fetch("https://erp.webmedigital.com/product/delete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+          },
+          body: JSON.stringify({ _id: productId }),
+        });
+      } catch (erpError) {
+        console.error("Failed to send user to ERP system:", erpError);
+      }
 
     // Return success response
     return res.status(200).json({
@@ -1356,6 +1382,19 @@ router.put(
         },
         { new: true, runValidators: true }
       );
+
+       try {
+        await fetch("https://erp.webmedigital.com/product/update", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+          },
+          body: JSON.stringify(updatedChildService.toObject()),
+        });
+      } catch (erpError) {
+        console.error("Failed to send user to ERP system:", erpError);
+      }
 
       return res.status(200).json({
         success: true,

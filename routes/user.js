@@ -247,6 +247,114 @@ router.get("/user/logout", (req, res) => {
   }
 });
 
+router.get("/user/notifications", auth, async (req, res) => {
+  try {
+    const { email } = req.user;
+
+    // Validate required parameters
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    let notifications = [];
+    try {
+      const erpRes = await fetch(
+        `http://erp.webmedigital.com/get/quotation?email=${encodeURIComponent(
+          email
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+          },
+        }
+      );
+      if (erpRes.ok) {
+        const erpData = await erpRes.json();
+        if (erpData.quotation && Array.isArray(erpData.quotation)) {
+          notifications = erpData.quotation.map((q) => {
+            // Only include non-sensitive fields in notification data
+            const {
+              odoo_id,
+              name,
+              display_name,
+              state,
+              date_order,
+              validity_date,
+              amount_untaxed,
+              amount_tax,
+              amount_total,
+              currency_id,
+              type_name,
+              order_line,
+            } = q;
+
+            const products = order_line.map((line) => {
+              const product = ChildService.findOne({
+                _id: line.website_product_id,
+              });
+              return {
+                _id: product._id,
+                odoo_id: line.product_id,
+                title: product.Title,
+                quantity: line.quantity,
+                price: line.price,
+                total_amount: line.total_amount,
+                image: product.image,
+              };
+            });
+
+            return {
+              type: "quotation",
+              data: {
+                odoo_id,
+                name,
+                display_name,
+                state,
+                date_order,
+                validity_date,
+                amount_untaxed,
+                amount_tax,
+                amount_total,
+                type_name,
+                products,
+              },
+              message: `You have a new quotation (${name}) for a total of ${amount_total} AED.`,
+            };
+          });
+        } else {
+          notifications = [];
+        }
+      } else {
+        console.error("ERP response not ok", erpRes.status);
+      }
+    } catch (erpError) {
+      console.error("Failed to fetch notifications from ERP system:", erpError);
+      // Do not block notifications if ERP call fails
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Notifications retrieved successfully",
+      notifications: notifications,
+    });
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching notifications.",
+    });
+  }
+});
+
 router.get("/user/availablebookingtimes", async (req, res) => {
   try {
     const { date } = req.query;
@@ -1679,4 +1787,4 @@ router.post("/subscribe", async (req, res) => {
   }
 });
 
-module.exports = router;
+module.exports = { auth, router };
