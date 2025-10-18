@@ -83,6 +83,9 @@ const parentServiceSchema = new mongoose.Schema(
       ref: 'Parentservice',
       required: [true, 'Category is required'],
     },
+    itemsTag:{
+      type: String,
+    },
     sections: {
       type: [sectionsSchema],
       validate: {
