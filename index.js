@@ -9,6 +9,7 @@ const webdata = require("./routes/getwebdata");
 const chat = require("./routes/chatSession");
 const payment = require("./routes/payment");
 const auth = require("./middlewares/adminAuth");
+const filesRouter = require("./routes/files.js").default;
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const app = express();
@@ -29,7 +30,7 @@ const Client_UrlwithWww = process.env.Client_Url.replace(
 app.use(
   cors({
     origin: [
-      "http://localhost:3001",
+      "http://localhost:3000",
       process.env.Client_Url,
       Client_UrlwithWww,
     ],
@@ -48,6 +49,8 @@ app.get("/", (req, res) => {
 });
 app.use("/api", auth, serviceproject);
 app.use("/api", auth, industrytestimonial);
+app.use("/api/files", filesRouter);
+
 app.use((req, res, next) => {
   const paths = ["/api/user/update"];
   if (paths.includes(req.path)) {
