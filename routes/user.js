@@ -1807,8 +1807,6 @@ router.post("/subscribe", async (req, res) => {
       }
     );
 
-     console.log(`${process.env.ERP_BACKEND}/api/v1/third-party/newsletter/subscribe`)
-
     if (!erpResponse.ok) {
       return res.status(500).json({
         success: false,
