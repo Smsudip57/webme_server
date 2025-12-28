@@ -1821,6 +1821,7 @@ router.post("/subscribe", async (req, res) => {
       .json({ success: true, message: "Subscribed successfully" });
   } catch (error) {
     console.error("Error during newsletter subscription:", error);
+    console.log(error)
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });
