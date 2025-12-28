@@ -8,6 +8,8 @@ const industrytestimonial = require("./routes/industrytestimonial");
 const webdata = require("./routes/getwebdata");
 const chat = require("./routes/chatSession");
 const payment = require("./routes/payment");
+const parentServices = require("./routes/parentServices");
+const childServices = require("./routes/childServices");
 const auth = require("./middlewares/adminAuth");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
@@ -29,7 +31,7 @@ const Client_UrlwithWww = process.env.Client_Url.replace(
 app.use(
   cors({
     origin: [
-      "http://localhost:3001",
+      "http://localhost:3000",
       process.env.Client_Url,
       Client_UrlwithWww,
     ],
@@ -62,6 +64,8 @@ app.use("/api", webdata);
 app.use("/api", user);
 app.use("/api/payment", payment);
 app.use("/api/chat", chat);
+app.use("/api/v1", parentServices);
+app.use("/api/v1", childServices);
 
 app.use((req, res, next) => {
   console.log(`Path hit: ${req.originalUrl}`);

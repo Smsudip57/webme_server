@@ -1,14 +1,22 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/user');
+const jwt = require("jsonwebtoken");
+const User = require("../models/user");
 
-const auth = async (req, res, next) => {
+const auth = async (req, res, next, pass) => {
   try {
-    const protectedPaths = ['service', 'project', 'industry', 'testimonial', 'product'];
-    const actions = ['create', 'edit', 'delete'];
+    const protectedPaths = [
+      "service",
+      "project",
+      "industry",
+      "testimonial",
+      "product",
+    ];
+    const actions = ["create", "edit", "delete"];
 
-    if (protectedPaths.some(path => req.originalUrl.includes(path)) && 
-        actions.some(action => req.originalUrl.includes(action))) {
-          console.log('Protected route');
+    if (
+      protectedPaths.some((path) => req.originalUrl.includes(path)) &&
+      actions.some((action) => req.originalUrl.includes(action))
+    ) {
+      console.log("Protected route");
     } else {
       next(); // Proceed if not matched
       return;
@@ -19,7 +27,7 @@ const auth = async (req, res, next) => {
     if (!cookie) {
       return res.status(401).json({
         success: false,
-        message: 'Unauthorized',
+        message: "Unauthorized",
       });
     }
 
@@ -29,30 +37,32 @@ const auth = async (req, res, next) => {
     } catch (error) {
       return res.status(403).json({
         success: false,
-        message: 'Invalid or expired token',
+        message: "Invalid or expired token",
       });
     }
 
     const { userId } = decoded;
 
     // Verify user exists
-    const user = await User.findById(userId).select('-password');
-    if (!user || user.role !== 'admin') {
-      return res.status(404).json({
-        success: false,
-        message: 'Unauthorized',
-      });
+    const user = await User.findById(userId).select("-password");
+    if (!pass) {
+      if (!user || user.role !== "admin") {
+        return res.status(404).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
     }
 
     // If user is authenticated, pass the user data to the next middleware/route handler
-    req.user = user;  // Optional: You can pass the user object for later use in routes
+    req.user = user; // Optional: You can pass the user object for later use in routes
 
-    next();  // Proceed to the next middleware/route handler
+    next(); // Proceed to the next middleware/route handler
   } catch (error) {
-    console.error('Error authenticating user:', error);
+    console.error("Error authenticating user:", error);
     return res.status(500).json({
       success: false,
-      message: 'An error occurred while authenticating the user',
+      message: "An error occurred while authenticating the user",
     });
   }
 };

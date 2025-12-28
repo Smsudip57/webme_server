@@ -6,6 +6,7 @@ const Service = require("../models/service");
 const ChildService = require("../models/childService");
 const BookingAvailability = require("../models/bookingAvailability");
 const Booking = require("../models/bookings");
+const auth = require("../middlewares/adminAuth");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const multer = require("multer");
@@ -1759,17 +1760,54 @@ router.post("/subscribe", async (req, res) => {
         .json({ success: false, message: "Email is invalid" });
     }
 
+    // Check if user exists from cookie
+    let user = null;
+    const cookie = req.cookies.user;
+
+    if (cookie) {
+      try {
+        const decoded = jwt.verify(cookie, process.env.JWT_SECRET);
+        const { userId } = decoded;
+        user = await User.findById(userId).select("-password");
+      } catch (error) {
+        console.error("Error verifying token:", error);
+      }
+    }
+
+    // Build payload based on whether user exists
+    const payload = {
+      email: email.toLowerCase().trim(),
+    };
+
+    if (user) {
+      // Split name into firstName and lastName
+      const fullName = user.profile?.name || "";
+      const nameParts = fullName.trim().split(/\s+/);
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      payload.firstName = firstName;
+      payload.lastName = lastName;
+      payload.phoneNumber = user.profile?.phoneNumber || "";
+
+      if (user.profile?.companyName) {
+        payload.companyName = user.profile.companyName;
+      }
+    }
+
     // Send data to ERP system
-    const erpResponse = await fetch(`https://erp.webmedigital.com/newsletter`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
-      },
-      body: JSON.stringify({
-        email: email.toLowerCase().trim(),
-      }),
-    });
+    const erpResponse = await fetch(
+      `${process.env.ERP_BACKEND}/api/v1/third-party/newsletter/subscribe`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
     if (!erpResponse.ok) {
       return res.status(500).json({
         success: false,
@@ -1781,6 +1819,7 @@ router.post("/subscribe", async (req, res) => {
       .status(201)
       .json({ success: true, message: "Subscribed successfully" });
   } catch (error) {
+    console.error("Error during newsletter subscription:", error);
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });

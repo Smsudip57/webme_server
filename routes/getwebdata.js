@@ -77,6 +77,36 @@ router.get("/testimonial/get", async (req, res) => {
   }
 });
 
+router.get("/testimonial/get/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const testimonial = await Testimonial.findById(id)
+      .populate("relatedService")
+      .populate("relatedIndustries")
+      .populate("relatedProducts")
+      .populate("relatedChikfdServices")
+      .exec();
+
+    if (!testimonial) {
+      return res.status(404).json({
+        success: false,
+        message: "Testimonial not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      testimonial,
+    });
+  } catch (error) {
+    console.error("Error fetching testimonial:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 router.get("/industry/get", async (req, res) => {
   try {
     const industries = await Industry.find({})
@@ -145,7 +175,7 @@ router.get("/blog/get", async (req, res) => {
       if (!blog) {
         return res.status(404).json({
           success: false,
-          message: "Blog not found with the provided slug"
+          message: "Blog not found with the provided slug",
         });
       }
       return res.status(200).json({ success: true, blog });
@@ -168,18 +198,22 @@ router.get("/knowledgebase/get", async (req, res) => {
 
     // If slug is provided, find specific knowledge base article
     if (slug) {
-      const knowledgebase = await KnowledgeBase.findOne({ slug }).populate("relatedServices");
+      const knowledgebase = await KnowledgeBase.findOne({ slug }).populate(
+        "relatedServices"
+      );
       if (!knowledgebase) {
         return res.status(404).json({
           success: false,
-          message: "Knowledge base article not found with the provided slug"
+          message: "Knowledge base article not found with the provided slug",
         });
       }
       return res.status(200).json({ success: true, knowledgebase });
     }
 
     // If no slug, return all knowledge base articles
-    const knowledgebases = await KnowledgeBase.find().populate("relatedServices");
+    const knowledgebases = await KnowledgeBase.find().populate(
+      "relatedServices"
+    );
     return res.status(200).json({
       success: true,
       knowledgebases,
@@ -343,7 +377,6 @@ router.get("/search", async (req, res) => {
   }
 });
 
-
 router.get("/get/bulk", async (req, res) => {
   try {
     const { keys } = req.query;
@@ -351,41 +384,49 @@ router.get("/get/bulk", async (req, res) => {
     if (!keys) {
       return res.status(400).json({
         success: false,
-        message: "Keys parameter is required. Example: ?keys=services,projects,industries"
+        message:
+          "Keys parameter is required. Example: ?keys=services,projects,industries",
       });
     }
 
-    const requestedKeys = Array.isArray(keys) ? keys : keys.split(',').map(k => k.trim());
+    const requestedKeys = Array.isArray(keys)
+      ? keys
+      : keys.split(",").map((k) => k.trim());
 
     const startTime = Date.now();
 
     const dataSources = {
       services: () => Service.find({}),
       projects: () => Project.find({}),
-      industries: () => Industry.find({}).populate("relatedServices")
-        .populate("relatedSuccessStory")
-        .populate("relatedProducts")
-        .populate("relatedChikfdServices")
-        .populate("relatedProjects"),
+      industries: () =>
+        Industry.find({})
+          .populate("relatedServices")
+          .populate("relatedSuccessStory")
+          .populate("relatedProducts")
+          .populate("relatedChikfdServices")
+          .populate("relatedProjects"),
       testimonials: () => Testimonial.find().populate("relatedService"),
       products: () => ParentService.find({}),
       childServices: () => ChildService.find({}),
       blogs: () => Blog.find({}),
       knowledgebase: () => KnowledgeBase.find().populate("relatedServices"),
-      faqs: () => Faq.find()
-        .populate("relatedServices")
-        .populate("relatedIndustries")
-        .populate("relatedProducts")
-        .populate("relatedChikfdServices"),
+      faqs: () =>
+        Faq.find()
+          .populate("relatedServices")
+          .populate("relatedIndustries")
+          .populate("relatedProducts")
+          .populate("relatedChikfdServices"),
       serviceDetails: () => ServiceDetails.find().populate("relatedServices"),
-      users: () => User.find({}).select('-password')
+      users: () => User.find({}).select("-password"),
     };
 
-    const invalidKeys = requestedKeys.filter(key => !dataSources[key]);
+    const invalidKeys = requestedKeys.filter((key) => !dataSources[key]);
     if (invalidKeys.length > 0) {
       return res.status(400).json({
         success: false,
-        message: `Invalid keys: ${invalidKeys.join(', ')}. Available keys: ${Object.keys(dataSources).join(', ')}`
+        message: `Invalid keys: ${invalidKeys.join(
+          ", "
+        )}. Available keys: ${Object.keys(dataSources).join(", ")}`,
       });
     }
 
@@ -401,7 +442,7 @@ router.get("/get/bulk", async (req, res) => {
 
     // Execute all queries in parallel
     const results = await Promise.all(promises);
-    // console.log(results?.find(item => item?.key ==="products")?.data?.find(item=> item?.Title ==="Custom eCommerce Mobile App Development"));  
+    // console.log(results?.find(item => item?.key ==="products")?.data?.find(item=> item?.Title ==="Custom eCommerce Mobile App Development"));
 
     // Transform results into a clean object
     const responseData = {};
@@ -419,7 +460,11 @@ router.get("/get/bulk", async (req, res) => {
     });
 
     const endTime = Date.now();
-    console.log(`Bulk API: ${requestedKeys.join(', ')} → ${endTime - startTime}ms (${totalItems} items)`);
+    console.log(
+      `Bulk API: ${requestedKeys.join(", ")} → ${
+        endTime - startTime
+      }ms (${totalItems} items)`
+    );
 
     // Send response
     return res.status(200).json({
@@ -429,19 +474,16 @@ router.get("/get/bulk", async (req, res) => {
       totalItems,
       executionTime: `${endTime - startTime}ms`,
       data: responseData,
-      ...(Object.keys(errors).length > 0 && { errors })
+      ...(Object.keys(errors).length > 0 && { errors }),
     });
-
   } catch (error) {
     console.error("Bulk API error:", error.message);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
-})
-
-
+});
 
 module.exports = router;
