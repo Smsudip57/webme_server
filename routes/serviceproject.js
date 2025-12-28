@@ -1735,7 +1735,7 @@ router.post(
         : req.body.relatedServices;
 
 
-        
+
       const existingDetails = await ServiceDetails.find({
         relatedServices: relatedServiceId,
       });

@@ -11,6 +11,7 @@ const payment = require("./routes/payment");
 const parentServices = require("./routes/parentServices");
 const childServices = require("./routes/childServices");
 const auth = require("./middlewares/adminAuth");
+const filesRouter = require("./routes/files.js").default;
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const app = express();
@@ -50,6 +51,8 @@ app.get("/", (req, res) => {
 });
 app.use("/api", auth, serviceproject);
 app.use("/api", auth, industrytestimonial);
+app.use("/api/files", filesRouter);
+
 app.use((req, res, next) => {
   const paths = ["/api/user/update"];
   if (paths.includes(req.path)) {

@@ -9,9 +9,116 @@ const Industry = require("../models/industry");
 const Testimonial = require("../models/testimonial");
 const ParentService = require("../models/Parentservice");
 const ChildService = require("../models/childService");
+const { FileManager } = require("../helpers/FileManager");
 const { route } = require("./user");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+
+
+async function processMainImage(newImageUrl, existingImageUrl) {
+  let imageToUse = existingImageUrl;
+
+  if (newImageUrl && newImageUrl !== existingImageUrl) {
+    if (newImageUrl.includes("/junk")) {
+      try {
+        // Delete old image from storage
+        try {
+          await FileManager.delete(existingImageUrl);
+        } catch (err) {
+          console.error("Error deleting old main image:", err.message);
+        }
+
+        // Move new image from junk to public
+        const imageResult = await FileManager.normal({ url: newImageUrl });
+        imageToUse = imageResult.url;
+      } catch (err) {
+        console.error("Error moving main image from junk:", err.message);
+        throw new Error(`Failed to process main image: ${err.message}`);
+      }
+    } else {
+      // Image is already in public folder, use as-is
+      imageToUse = newImageUrl;
+    }
+  }
+
+  return imageToUse;
+}
+
+
+async function processSections(newSections, existingSections) {
+  if (!newSections) return existingSections;
+
+  if (!Array.isArray(newSections) || newSections.length === 0) {
+    throw new Error("Sections must be a non-empty array");
+  }
+
+  return await Promise.all(
+    newSections.map(async (section, index) => {
+      if (
+        !section.title ||
+        !section.image ||
+        !Array.isArray(section.points) ||
+        section.points.length === 0
+      ) {
+        throw new Error(
+          `Section ${section.title || "unknown"} is missing required fields`
+        );
+      }
+
+      let sectionImage = section.image;
+      const isNewImage = !existingSections.find(s => s.image === section.image);
+
+      // Handle junk image: move to public and delete old
+      if (isNewImage && sectionImage.includes("/junk")) {
+        try {
+          const oldSection = existingSections[index];
+          if (oldSection && oldSection.image) {
+            try {
+              await FileManager.delete(oldSection.image);
+            } catch (err) {
+              console.error(`Error deleting old section image (${section.title}):`, err.message);
+            }
+          }
+
+          const sectionImageResult = await FileManager.normal({ url: sectionImage });
+          sectionImage = sectionImageResult.url;
+        } catch (err) {
+          console.error(`Error moving section image (${section.title}) from junk:`, err.message);
+          throw new Error(`Failed to process section image: ${err.message}`);
+        }
+      }
+      // Handle public image: just delete old if changed
+      else if (isNewImage && !sectionImage.includes("/junk")) {
+        const oldSection = existingSections[index];
+        if (oldSection && oldSection.image && oldSection.image !== sectionImage) {
+          try {
+            await FileManager.delete(oldSection.image);
+          } catch (err) {
+            console.error(`Error deleting old section image (${section.title}):`, err.message);
+          }
+        }
+      }
+
+      const processedPoints = section.points.map((point) => {
+        if (!point.title || !point.detail) {
+          throw new Error(
+            `Point in section ${section.title} is missing title or detail`
+          );
+        }
+        return {
+          title: point.title,
+          detail: point.detail,
+        };
+      });
+
+      return {
+        title: section.title,
+        image: sectionImage,
+        points: processedPoints,
+      };
+    })
+  );
+}
 
 const UPLOAD_DIR = path.join(process.cwd(), "public");
 
@@ -31,6 +138,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
+
 
 router.post(
   "/testimonial/create",
@@ -518,12 +626,10 @@ router.delete("/industry/delete", async (req, res) => {
   }
 });
 
+router.use("/product/create", express.json());
+
 router.post(
   "/product/create",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 30 },
-  ]),
   async (req, res) => {
     try {
       // Extract basic product fields
@@ -533,10 +639,11 @@ router.post(
         moreDetail,
         category,
         slug,
+        image: mainImageUrl,
         sections: sectionsJSON,
       } = req.body;
 
-      // Validate required fields
+      const moduleItem = "Product";
       if (
         !Title ||
         !detail ||
@@ -544,12 +651,12 @@ router.post(
         !category ||
         !slug ||
         !sectionsJSON ||
-        !req.files.mainImage
+        !mainImageUrl
       ) {
         return res.status(400).json({
           success: false,
           message:
-            "All fields are required: Title, detail, moreDetail, category, slug, sections, and mainImage",
+            "All fields are required: Title, detail, moreDetail, category, slug, image, sections",
         });
       }
 
@@ -571,81 +678,77 @@ router.post(
         });
       }
 
-      // Get main image URL
-      const mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
 
-      // Parse sections from JSON
-      let sectionsData;
-      try {
-        sectionsData = JSON.parse(sectionsJSON);
-        if (!Array.isArray(sectionsData) || sectionsData.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "Sections must be a non-empty array",
-          });
-        }
-      } catch (error) {
+      // Expect sections as JSON array, not string
+      if (!Array.isArray(sectionsJSON) || sectionsJSON.length === 0) {
         return res.status(400).json({
           success: false,
-          message: "Invalid sections JSON format",
+          message: "Sections must be a non-empty array",
         });
       }
 
-      // Process sections with uploaded images
-      const sectionImages = req.files.sectionImages || [];
-      let imageIndex = 0;
+      // Move main image from junk to public using FileManager
+      let finalMainImageUrl = mainImageUrl;
+      try {
+        const mainImageResult = await FileManager.normal({ url: mainImageUrl });
+        finalMainImageUrl = mainImageResult.url;
+      } catch (err) {
+        console.error("Error moving main image from junk:", err.message);
+        throw new Error(`Failed to process main image: ${err.message}`);
+      }
 
-      const processedSections = sectionsData.map((section) => {
-        // Validate section data
-        if (
-          !section.title ||
-          !Array.isArray(section.points) ||
-          section.points.length === 0
-        ) {
-          throw new Error(
-            `Section ${section.title || "unknown"} is missing required fields`
-          );
-        }
-
-        // Use uploaded image if available, otherwise use URL from JSON
-        let sectionImage;
-        if (section.useUploadedImage && imageIndex < sectionImages.length) {
-          sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
-        } else {
-          sectionImage = section.image;
-          // Validate that image URL is provided if not uploading
-          if (!sectionImage) {
-            throw new Error(`Image is required for section: ${section.title}`);
-          }
-        }
-
-        // Process points
-        const processedPoints = section.points.map((point) => {
-          if (!point.title || !point.detail) {
+      // Process sections with image movement from junk to public
+      const processedSections = await Promise.all(
+        sectionsJSON.map(async (section) => {
+          // Validate section data
+          if (
+            !section.title ||
+            !Array.isArray(section.points) ||
+            section.points.length === 0
+          ) {
             throw new Error(
-              `Point in section ${section.title} is missing title or detail`
+              `Section ${section.title || "unknown"} is missing required fields`
             );
           }
+
+          // Move section image from junk to public using FileManager
+          let sectionImage = section.image;
+          try {
+            const sectionImageResult = await FileManager.normal({ url: sectionImage });
+            sectionImage = sectionImageResult.url;
+          } catch (err) {
+            console.error(`Error moving section image (${section.title}) from junk:`, err.message);
+            throw new Error(`Failed to process section image: ${err.message}`);
+          }
+
+          // Process points
+          const processedPoints = section.points.map((point) => {
+            if (!point.title || !point.detail) {
+              throw new Error(
+                `Point in section ${section.title} is missing title or detail`
+              );
+            }
+            return {
+              title: point.title,
+              detail: point.detail,
+            };
+          });
+
           return {
-            title: point.title,
-            detail: point.detail,
+            title: section.title,
+            image: sectionImage,
+            points: processedPoints,
           };
-        });
+        })
+      );
 
-        return {
-          title: section.title,
-          image: sectionImage,
-          points: processedPoints,
-        };
-      });
-
-      // Create product with processed data
+      // Create product with processed data (with moved image URLs)
       const newProduct = new ParentService({
         Title,
         detail,
         moreDetail,
         slug,
-        image: mainImageUrl,
+        image: finalMainImageUrl,
         category,
         sections: processedSections,
       });
@@ -655,26 +758,11 @@ router.post(
 
       return res.status(201).json({
         success: true,
-        message: "Product created successfully",
+        message: `${moduleItem} created successfully`,
         product: newProduct,
       });
     } catch (error) {
-      console.error("Error creating product:", error);
-
-      // Clean up uploaded files on error
-      try {
-        if (req.files.mainImage) {
-          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.mainImage[0].filename));
-        }
-        if (req.files.sectionImages) {
-          req.files.sectionImages.forEach((file) => {
-            fs.unlinkSync(path.join(UPLOAD_DIR, file.filename));
-          });
-        }
-      } catch (cleanupError) {
-        console.error("Error cleaning up files:", cleanupError);
-      }
-
+      console.error(`Error creating ${moduleItem.toLowerCase()}:`, error);
       return res.status(500).json({
         success: false,
         message: error.message || "Something went wrong. Please try again.",
@@ -688,11 +776,11 @@ router.use("/product/delete", express.json());
 router.post("/product/delete", async (req, res) => {
   try {
     const { productId } = req.body;
-
+    const moduleItem = "Product";
     if (!productId) {
       return res.status(400).json({
         success: false,
-        message: "Product ID is required",
+        message: `${moduleItem} ID is required`,
       });
     }
 
@@ -700,62 +788,59 @@ router.post("/product/delete", async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found",
+        message: `${moduleItem} not found`,
       });
     }
 
-    const fileDeleteOperations = [];
-
-    if (product.image) {
-      const mainImagePath = path.join(
-        process.cwd(),
-        "public",
-        product.image.split("/").pop()
-      );
-      if (fs.existsSync(mainImagePath)) {
-        fileDeleteOperations.push(fs.promises.unlink(mainImagePath));
+    // Delete images using FileManager.delete (supports local or cloud storage)
+    try {
+      const deleteOps = [];
+      if (product.image) {
+        deleteOps.push(
+          FileManager.delete(product.image).catch((e) => {
+            console.error("Failed to delete product main image:", e.message || e);
+          })
+        );
       }
-    }
-
-    if (product.sections && product.sections.length > 0) {
-      for (const section of product.sections) {
-        if (section.image) {
-          const sectionImagePath = path.join(
-            process.cwd(),
-            "public",
-            section.image.split("/").pop()
-          );
-          if (fs.existsSync(sectionImagePath)) {
-            fileDeleteOperations.push(fs.promises.unlink(sectionImagePath));
+      if (product.sections && product.sections.length > 0) {
+        for (const section of product.sections) {
+          if (section.image) {
+            deleteOps.push(
+              FileManager.delete(section.image).catch((e) => {
+                console.error(
+                  `Failed to delete section image (${section.title}):`,
+                  e.message || e
+                );
+              })
+            );
           }
         }
       }
+      await Promise.allSettled(deleteOps);
+    } catch (fileMgrErr) {
+      console.error("FileManager delete error:", fileMgrErr);
     }
-    await Promise.allSettled(fileDeleteOperations);
-    
+
     // Delete all child services that reference this parent product
     await ChildService.deleteMany({ category: productId });
-    
+
     await ParentService.findByIdAndDelete(productId);
     return res.status(200).json({
       success: true,
-      message: "Product, all child services, and all associated images deleted successfully",
+      message: `${moduleItem}, all child services, and all associated images deleted successfully`,
     });
   } catch (err) {
-    console.error("Error deleting product:", err);
+    console.error(`Error deleting ${moduleItem.toLowerCase()}:`, err);
     return res.status(500).json({
       success: false,
-      message: "Failed to delete product",
+      message: `Failed to delete ${moduleItem.toLowerCase()}`,
     });
   }
 });
 
+router.use("/product/edit", express.json());
 router.put(
   "/product/edit",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 30 },
-  ]),
   async (req, res) => {
     try {
       const {
@@ -765,15 +850,15 @@ router.put(
         moreDetail,
         category,
         slug,
+        image: mainImageUrl,
         sections: sectionsJSON,
-        imagesToDelete,
       } = req.body;
-
+      const moduleItem = "Product";
       // Validate product ID
       if (!productId) {
         return res.status(400).json({
           success: false,
-          message: "Product ID is required",
+          message: `${moduleItem} ID is required`,
         });
       }
 
@@ -782,7 +867,7 @@ router.put(
       if (!existingProduct) {
         return res.status(404).json({
           success: false,
-          message: "Product not found",
+          message: `${moduleItem} not found`,
         });
       }
 
@@ -812,79 +897,20 @@ router.put(
         }
       }
 
-      // Handle main image update
-      let mainImageUrl = existingProduct.image;
-      if (req.files.mainImage) {
-        // Delete old image if it exists
-        try {
-          const oldImagePath = path.join(
-            UPLOAD_DIR,
-            existingProduct.image.split("/").pop()
-          );
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlinkSync(oldImagePath);
-          }
-        } catch (error) {
-          console.error("Error deleting old main image:", error);
-        }
+      // Process main image using helper function
+      const mainImageUrlToUse = await processMainImage(mainImageUrl, existingProduct.image);
 
-        // Set new image URL
-        mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
-      }
-
-      // Process sections update
-      let updatedSections;
+      // Process sections using helper function
+      let updatedSections = existingProduct.sections;
       if (sectionsJSON) {
         try {
-          const sectionsData = JSON.parse(sectionsJSON);
-
-          // Delete images that need to be removed
-          if (imagesToDelete) {
-            const imagesToRemove = JSON.parse(imagesToDelete);
-            for (const imageUrl of imagesToRemove) {
-              try {
-                const imagePath = path.join(
-                  UPLOAD_DIR,
-                  imageUrl.split("/").pop()
-                );
-                if (fs.existsSync(imagePath)) {
-                  fs.unlinkSync(imagePath);
-                }
-              } catch (error) {
-                console.error(`Error deleting image ${imageUrl}:`, error);
-              }
-            }
-          }
-
-          // Process section images
-          const sectionImages = req.files.sectionImages || [];
-          let imageIndex = 0;
-
-          updatedSections = sectionsData.map((section) => {
-            // Use uploaded image if specified
-            let sectionImage = section.image;
-            if (section.useUploadedImage && imageIndex < sectionImages.length) {
-              sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
-            }
-
-            return {
-              title: section.title,
-              image: sectionImage,
-              points: section.points.map((point) => ({
-                title: point.title,
-                detail: point.detail,
-              })),
-            };
-          });
-        } catch (error) {
+          updatedSections = await processSections(sectionsJSON, existingProduct.sections);
+        } catch (err) {
           return res.status(400).json({
             success: false,
-            message: "Invalid sections data: " + error.message,
+            message: err.message || "Error processing sections",
           });
         }
-      } else {
-        // Keep existing sections if none provided
-        updatedSections = existingProduct.sections;
       }
 
       // Update product with all fields
@@ -895,7 +921,7 @@ router.put(
           detail: detail || existingProduct.detail,
           moreDetail: moreDetail || existingProduct.moreDetail,
           slug: slug || existingProduct.slug,
-          image: mainImageUrl,
+          image: mainImageUrlToUse,
           category: category || existingProduct.category,
           sections: updatedSections,
         },
@@ -904,11 +930,11 @@ router.put(
 
       return res.status(200).json({
         success: true,
-        message: "Product updated successfully",
+        message: `${moduleItem} updated successfully`,
         product: updatedProduct,
       });
     } catch (error) {
-      console.error("Error updating product:", error);
+      console.error(`Error updating ${moduleItem.toLowerCase()}:`, error);
       return res.status(500).json({
         success: false,
         message: error.message || "Something went wrong. Please try again.",
@@ -917,112 +943,102 @@ router.put(
   }
 );
 
-router.post(
-  "/child/create",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 30 },
-  ]),
-  async (req, res) => {
+router.use("/child/create", express.json());
+router.post("/child/create", async (req, res) => {
+  try {
+    const {
+      Title,
+      detail,
+      moreDetail,
+      category,
+      slug,
+      itemsTag,
+      image,
+      sections,
+    } = req.body;
+
+    const moduleItem = "Child Service";
+
+    // Validate required fields
+    if (
+      !Title ||
+      !detail ||
+      !moreDetail ||
+      !category ||
+      !slug ||
+      !itemsTag ||
+      !sections ||
+      !image
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "All fields are required: Title, detail, moreDetail, category, slug, itemsTag, sections, and image",
+      });
+    }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Slug must be lowercase, containing only letters, numbers, and hyphens",
+      });
+    }
+
+    // Check if slug already exists
+    const existingChildService = await ChildService.findOne({ slug });
+    if (existingChildService) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug already exists. Please use a unique slug.",
+      });
+    }
+
+    // Process itemsTag - convert to string if needed
+    let itemsTagString = "";
+    if (itemsTag) {
+      if (typeof itemsTag === "string") {
+        itemsTagString = itemsTag.trim();
+      } else if (Array.isArray(itemsTag)) {
+        itemsTagString = itemsTag.join(", ");
+      } else {
+        itemsTagString = String(itemsTag).trim();
+      }
+    }
+
+    // Validate itemsTag string
+    if (!itemsTagString || itemsTagString.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one item tag is required",
+      });
+    }
+
+    // Validate sections
+    if (!Array.isArray(sections) || sections.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Sections must be a non-empty array",
+      });
+    }
+
+    // Move main image from junk to public using FileManager
+    let finalImageUrl = image;
     try {
-      // Extract basic product fields
-      const {
-        Title,
-        detail,
-        moreDetail,
-        category,
-        slug,
-        itemsTag,
-        sections: sectionsJSON,
-      } = req.body;
+      const imageResult = await FileManager.normal({ url: image });
+      finalImageUrl = imageResult.url;
+    } catch (err) {
+      console.error("Error moving main image from junk:", err.message);
+      throw new Error(`Failed to process main image: ${err.message}`);
+    }
 
-      // Validate required fields
-      if (
-        !Title ||
-        !detail ||
-        !moreDetail ||
-        !category ||
-        !slug ||
-        !itemsTag ||
-        !sectionsJSON ||
-        !req.files.mainImage
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "All fields are required: Title, detail, moreDetail, category, slug, itemsTag, sections, and mainImage",
-        });
-      }
-
-      // Validate slug format
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Slug must be lowercase, containing only letters, numbers, and hyphens",
-        });
-      }
-
-      // Check if slug already exists
-      const existingChildService = await ChildService.findOne({ slug });
-      if (existingChildService) {
-        return res.status(400).json({
-          success: false,
-          message: "Slug already exists. Please use a unique slug.",
-        });
-      }
-
-      // Process itemsTag - convert to string if needed
-      let itemsTagString = "";
-      if (itemsTag) {
-        if (typeof itemsTag === "string") {
-          // If it's already a string, use it directly
-          itemsTagString = itemsTag.trim();
-        } else if (Array.isArray(itemsTag)) {
-          // If it's an array, join with commas
-          itemsTagString = itemsTag.join(", ");
-        } else {
-          // Convert other types to string
-          itemsTagString = String(itemsTag).trim();
-        }
-      }
-
-      // Validate itemsTag string
-      if (!itemsTagString || itemsTagString.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "At least one item tag is required",
-        });
-      }
-
-      // Get main image URL
-      const mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
-
-      // Parse sections from JSON
-      let sectionsData;
-      try {
-        sectionsData = JSON.parse(sectionsJSON);
-        if (!Array.isArray(sectionsData) || sectionsData.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "Sections must be a non-empty array",
-          });
-        }
-      } catch (error) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid sections JSON format",
-        });
-      }
-
-      // Process sections with uploaded images
-      const sectionImages = req.files.sectionImages || [];
-      let imageIndex = 0;
-
-      const processedSections = sectionsData.map((section) => {
-        // Validate section data
+    // Validate and process sections with image movement
+    const processedSections = await Promise.all(
+      sections.map(async (section) => {
         if (
           !section.title ||
+          !section.image ||
           !Array.isArray(section.points) ||
           section.points.length === 0
         ) {
@@ -1031,19 +1047,17 @@ router.post(
           );
         }
 
-        // Use uploaded image if available, otherwise use URL from JSON
-        let sectionImage;
-        if (section.useUploadedImage && imageIndex < sectionImages.length) {
-          sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
-        } else {
-          sectionImage = section.image;
-          // Validate that image URL is provided if not uploading
-          if (!sectionImage) {
-            throw new Error(`Image is required for section: ${section.title}`);
-          }
+        // Move section image from junk to public using FileManager
+        let sectionImage = section.image;
+        try {
+          const sectionImageResult = await FileManager.normal({ url: sectionImage });
+          sectionImage = sectionImageResult.url;
+        } catch (err) {
+          console.error(`Error moving section image (${section.title}) from junk:`, err.message);
+          throw new Error(`Failed to process section image: ${err.message}`);
         }
 
-        // Process points
+        // Validate each point
         const processedPoints = section.points.map((point) => {
           if (!point.title || !point.detail) {
             throw new Error(
@@ -1061,354 +1075,236 @@ router.post(
           image: sectionImage,
           points: processedPoints,
         };
-      });
+      })
+    );
 
-      // Create child service with processed data
-      const newChildService = new ChildService({
-        Title,
-        detail,
-        moreDetail,
-        slug,
-        itemsTag: itemsTagString,
-        image: mainImageUrl,
-        category,
-        sections: processedSections,
-      });
+    // Create child service with processed data (with moved image URLs)
+    const newChildService = new ChildService({
+      Title,
+      detail,
+      moreDetail,
+      slug,
+      itemsTag: itemsTagString,
+      image: finalImageUrl,
+      category,
+      sections: processedSections,
+    });
 
-      // Save to database
-      await newChildService.save();
+    await newChildService.save();
 
-      try {
-        await fetch("https://erp.webmedigital.com/product/create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
-          },
-          body: JSON.stringify(newChildService.toObject()),
-        });
-      } catch (erpError) {
-        console.error("Failed to send user to ERP system:", erpError);
-      }
-
-      return res.status(201).json({
-        success: true,
-        message: "Child service created successfully",
-        product: newChildService,
-      });
-    } catch (error) {
-      console.error("Error creating child service:", error);
-
-      // Clean up uploaded files on error
-      try {
-        if (req.files.mainImage) {
-          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.mainImage[0].filename));
-        }
-        if (req.files.sectionImages) {
-          req.files.sectionImages.forEach((file) => {
-            fs.unlinkSync(path.join(UPLOAD_DIR, file.filename));
-          });
-        }
-      } catch (cleanupError) {
-        console.error("Error cleaning up files:", cleanupError);
-      }
-
-      return res.status(500).json({
-        success: false,
-        message: error.message || "Something went wrong. Please try again.",
-      });
-    }
+    return res.status(201).json({
+      success: true,
+      message: `${moduleItem} created successfully`,
+      product: newChildService,
+    });
+  } catch (error) {
+    console.error(`Error creating ${moduleItem.toLowerCase()}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong. Please try again.",
+    });
   }
-);
+});
 router.use("/child/delete", express.json());
 
 router.post("/child/delete", async (req, res) => {
   try {
-    const { productId } = req.body;
+    const { childId } = req.body;
+    const moduleItem = "Child Service";
 
-    if (!productId) {
+    if (!childId) {
       return res.status(400).json({
         success: false,
-        message: "Product ID is required",
+        message: `${moduleItem} ID is required`,
       });
     }
 
-    const product = await ChildService.findById(productId);
+    const product = await ChildService.findById(childId);
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found",
+        message: `${moduleItem} not found`,
       });
     }
 
-    // Create an array to track all file operations
-    const fileDeleteOperations = [];
-
-    // Delete the main product image
-    if (product.image) {
-      const mainImagePath = path.join(
-        process.cwd(),
-        "public",
-        product.image.split("/").pop()
-      );
-      if (fs.existsSync(mainImagePath)) {
-        fileDeleteOperations.push(fs.promises.unlink(mainImagePath));
+    // Delete images using FileManager.delete (supports local or cloud storage)
+    try {
+      const deleteOps = [];
+      if (product.image) {
+        deleteOps.push(
+          FileManager.delete(product.image).catch((e) => {
+            console.error("Failed to delete child main image:", e.message || e);
+          })
+        );
       }
-    }
-
-    // Delete all section images
-    if (product.sections && product.sections.length > 0) {
-      for (const section of product.sections) {
-        if (section.image) {
-          const sectionImagePath = path.join(
-            process.cwd(),
-            "public",
-            section.image.split("/").pop()
-          );
-          if (fs.existsSync(sectionImagePath)) {
-            fileDeleteOperations.push(fs.promises.unlink(sectionImagePath));
+      if (product.sections && product.sections.length > 0) {
+        for (const section of product.sections) {
+          if (section.image) {
+            deleteOps.push(
+              FileManager.delete(section.image).catch((e) => {
+                console.error(
+                  `Failed to delete child section image (${section.title}):`,
+                  e.message || e
+                );
+              })
+            );
           }
         }
       }
+      await Promise.allSettled(deleteOps);
+    } catch (fileMgrErr) {
+      console.error("FileManager delete error:", fileMgrErr);
     }
 
-    // Wait for all file delete operations to complete
-    await Promise.allSettled(fileDeleteOperations);
+    // Delete the child service from the database
+    await ChildService.findByIdAndDelete(childId);
 
-    // Delete the product from the database
-    await ChildService.findByIdAndDelete(productId);
-
-     try {
-        await fetch("https://erp.webmedigital.com/product/delete", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
-          },
-          body: JSON.stringify({ _id: productId }),
-        });
-      } catch (erpError) {
-        console.error("Failed to send user to ERP system:", erpError);
-      }
+    try {
+      await fetch("https://erp.webmedigital.com/product/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
+        },
+        body: JSON.stringify({ _id: childId }),
+      });
+    } catch (erpError) {
+      console.error("Failed to send user to ERP system:", erpError);
+    }
 
     // Return success response
     return res.status(200).json({
       success: true,
-      message: "Child service and all associated images deleted successfully",
+      message: `${moduleItem} and all associated images deleted successfully`,
     });
   } catch (err) {
-    console.error("Error deleting child service:", err);
+    console.error(`Error deleting ${moduleItem.toLowerCase()}:`, err);
     return res.status(500).json({
       success: false,
-      message: "Failed to delete child service",
+      message: `Failed to delete ${moduleItem.toLowerCase()}`,
     });
   }
 });
 
-router.put(
-  "/child/edit",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "sectionImages", maxCount: 30 },
-  ]),
-  async (req, res) => {
-    try {
-      // Extract fields from request
-      const {
-        productId,
-        Title,
-        detail,
-        moreDetail,
-        category,
-        slug,
-        itemsTag,
-        sections: sectionsJSON,
-        imagesToDelete,
-      } = req.body;
+router.use("/child/edit", express.json());
+router.put("/child/edit", async (req, res) => {
+  try {
+    const {
+      childId,
+      Title,
+      detail,
+      moreDetail,
+      category,
+      slug,
+      itemsTag,
+      image,
+      sections,
+    } = req.body;
 
-      // Validate product ID
-      if (!productId) {
-        return res.status(400).json({
-          success: false,
-          message: "Product ID is required",
-        });
-      }
+    const moduleItem = "Child Service";
 
-      // Find existing child service
-      const existingChildService = await ChildService.findById(productId);
-      if (!existingChildService) {
-        return res.status(404).json({
-          success: false,
-          message: "Child service not found",
-        });
-      }
-
-      // Validate slug if provided
-      if (slug) {
-        // Validate slug format
-        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Slug must be lowercase, containing only letters, numbers, and hyphens",
-          });
-        }
-
-        // Check if slug already exists and belongs to a different child service
-        if (existingChildService.slug !== slug) {
-          const slugExists = await ChildService.findOne({
-            slug,
-            _id: { $ne: productId },
-          });
-          if (slugExists) {
-            return res.status(400).json({
-              success: false,
-              message: "Slug already exists. Please use a unique slug.",
-            });
-          }
-        }
-      }
-
-      // Process itemsTag if provided
-      let itemsTagString = existingChildService.itemsTag || "";
-      if (itemsTag !== undefined) {
-        if (typeof itemsTag === "string") {
-          // If it's already a string, use it directly
-          itemsTagString = itemsTag.trim();
-        } else if (Array.isArray(itemsTag)) {
-          // If it's an array, join with commas
-          itemsTagString = itemsTag.join(", ");
-        } else {
-          // Convert other types to string
-          itemsTagString = String(itemsTag).trim();
-        }
-
-        // Validate itemsTag string
-        if (!itemsTagString || itemsTagString.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "At least one item tag is required",
-          });
-        }
-      }
-
-      // Handle main image update
-      let mainImageUrl = existingChildService.image;
-      if (req.files.mainImage) {
-        // Delete old image if it exists
-        try {
-          const oldImagePath = path.join(
-            UPLOAD_DIR,
-            existingChildService.image.split("/").pop()
-          );
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlinkSync(oldImagePath);
-          }
-        } catch (error) {
-          console.error("Error deleting old main image:", error);
-        }
-
-        // Set new image URL
-        mainImageUrl = getImageUrl(req.files.mainImage[0].filename);
-      }
-
-      // Process sections update
-      let updatedSections;
-      if (sectionsJSON) {
-        try {
-          const sectionsData = JSON.parse(sectionsJSON);
-
-          // Delete images that need to be removed
-          if (imagesToDelete) {
-            const imagesToRemove = JSON.parse(imagesToDelete);
-            for (const imageUrl of imagesToRemove) {
-              try {
-                const imagePath = path.join(
-                  UPLOAD_DIR,
-                  imageUrl.split("/").pop()
-                );
-                if (fs.existsSync(imagePath)) {
-                  fs.unlinkSync(imagePath);
-                }
-              } catch (error) {
-                console.error(`Error deleting image ${imageUrl}:`, error);
-              }
-            }
-          }
-
-          // Process section images
-          const sectionImages = req.files.sectionImages || [];
-          let imageIndex = 0;
-
-          updatedSections = sectionsData.map((section) => {
-            // Use uploaded image if specified
-            let sectionImage = section.image;
-            if (section.useUploadedImage && imageIndex < sectionImages.length) {
-              sectionImage = getImageUrl(sectionImages[imageIndex++].filename);
-            }
-
-            return {
-              title: section.title,
-              image: sectionImage,
-              points: section.points.map((point) => ({
-                title: point.title,
-                detail: point.detail,
-              })),
-            };
-          });
-        } catch (error) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid sections data: " + error.message,
-          });
-        }
-      } else {
-        // Keep existing sections if none provided
-        updatedSections = existingChildService.sections;
-      }
-
-      // Update child service with all fields
-      const updatedChildService = await ChildService.findByIdAndUpdate(
-        productId,
-        {
-          Title: Title || existingChildService.Title,
-          detail: detail || existingChildService.detail,
-          moreDetail: moreDetail || existingChildService.moreDetail,
-          slug: slug || existingChildService.slug,
-          itemsTag: itemsTagString,
-          image: mainImageUrl,
-          category: category || existingChildService.category,
-          sections: updatedSections,
-        },
-        { new: true, runValidators: true }
-      );
-
-       try {
-        await fetch("https://erp.webmedigital.com/product/update", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "erp-secret-key": process.env.ERP_COMMUNICATION_SECRET_KEY,
-          },
-          body: JSON.stringify(updatedChildService.toObject()),
-        });
-      } catch (erpError) {
-        console.error("Failed to send user to ERP system:", erpError);
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Child service updated successfully",
-        product: updatedChildService,
-      });
-    } catch (error) {
-      console.error("Error updating child service:", error);
-      return res.status(500).json({
+    // Validate child ID
+    if (!childId) {
+      return res.status(400).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again.",
+        message: `${moduleItem} ID is required`,
       });
     }
+
+    // Find existing child service
+    const existingChildService = await ChildService.findById(childId);
+    if (!existingChildService) {
+      return res.status(404).json({
+        success: false,
+        message: `${moduleItem} not found`,
+      });
+    }
+
+    // Validate slug if provided
+    if (slug) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Slug must be lowercase, containing only letters, numbers, and hyphens",
+        });
+      }
+      if (existingChildService.slug !== slug) {
+        const slugExists = await ChildService.findOne({
+          slug,
+          _id: { $ne: childId },
+        });
+        if (slugExists) {
+          return res.status(400).json({
+            success: false,
+            message: "Slug already exists. Please use a unique slug.",
+          });
+        }
+      }
+    }
+
+    // Process itemsTag if provided
+    let itemsTagString = existingChildService.itemsTag || "";
+    if (itemsTag !== undefined) {
+      if (typeof itemsTag === "string") {
+        itemsTagString = itemsTag.trim();
+      } else if (Array.isArray(itemsTag)) {
+        itemsTagString = itemsTag.join(", ");
+      } else {
+        itemsTagString = String(itemsTag).trim();
+      }
+      if (!itemsTagString || itemsTagString.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one item tag is required",
+        });
+      }
+    }
+
+    // Process main image using helper function
+    const imageToUse = await processMainImage(image, existingChildService.image);
+
+    // Validate and process sections using helper function
+    let updatedSections = existingChildService.sections;
+    if (sections) {
+      try {
+        updatedSections = await processSections(sections, existingChildService.sections);
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message || "Error processing sections",
+        });
+      }
+    }
+
+    // Update child service with all fields
+    const updatedChildService = await ChildService.findByIdAndUpdate(
+      childId,
+      {
+        Title: Title || existingChildService.Title,
+        detail: detail || existingChildService.detail,
+        moreDetail: moreDetail || existingChildService.moreDetail,
+        slug: slug || existingChildService.slug,
+        itemsTag: itemsTagString,
+        image: imageToUse,
+        category: category || existingChildService.category,
+        sections: updatedSections,
+      },
+      { new: true, runValidators: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `${moduleItem} updated successfully`,
+      product: updatedChildService,
+    });
+  } catch (error) {
+    console.error(`Error updating ${moduleItem.toLowerCase()}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong. Please try again.",
+    });
   }
-);
+});
 
 module.exports = router;
