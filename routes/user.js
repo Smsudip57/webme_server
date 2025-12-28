@@ -6,7 +6,6 @@ const Service = require("../models/service");
 const ChildService = require("../models/childService");
 const BookingAvailability = require("../models/bookingAvailability");
 const Booking = require("../models/bookings");
-const auth = require("../middlewares/adminAuth");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const multer = require("multer");
