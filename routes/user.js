@@ -1807,7 +1807,7 @@ router.post("/subscribe", async (req, res) => {
       }
     );
 
-    console.log("ERP Response Status:", erpResponse.status);
+     console.log(`${process.env.ERP_BACKEND}/api/v1/third-party/newsletter/subscribe`)
 
     if (!erpResponse.ok) {
       return res.status(500).json({
@@ -1821,7 +1821,6 @@ router.post("/subscribe", async (req, res) => {
       .json({ success: true, message: "Subscribed successfully" });
   } catch (error) {
     console.error("Error during newsletter subscription:", error);
-    console.log(`${process.env.ERP_BACKEND}/api/v1/third-party/newsletter/subscribe`)
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });
