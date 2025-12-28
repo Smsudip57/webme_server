@@ -1807,6 +1807,8 @@ router.post("/subscribe", async (req, res) => {
       }
     );
 
+    console.log("ERP Response Status:", erpResponse.status);
+
     if (!erpResponse.ok) {
       return res.status(500).json({
         success: false,
