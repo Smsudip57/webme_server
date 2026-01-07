@@ -1,8 +1,5 @@
 const mongoose = require("mongoose");
 
-
-
-
 const pointsSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -30,7 +27,7 @@ const sectionsSchema = new mongoose.Schema({
       validator: function (v) {
         return Array.isArray(v) && v.length > 0;
       },
-      message: "At least one image is required for each section"
+      message: "At least one image is required for each section",
     },
   },
   points: {
@@ -64,18 +61,31 @@ const projectSchema = new mongoose.Schema(
         message: (props) => `${props.value} is not a valid slug format`,
       },
     },
-    relatedServices: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Service'
-    }],
-    relatedProducts: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Parentservice'
-    }],
-    relatedChikfdServices: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Childservices'
-    }],
+    relatedServices: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Service",
+      },
+    ],
+    relatedProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Parentservice",
+      },
+    ],
+    relatedChikfdServices: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Childservices",
+      },
+    ],
+    relatedIndustries: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Industry",
+      },
+    ],
+
     detail: {
       type: String,
       required: [true, "Detail is required"],

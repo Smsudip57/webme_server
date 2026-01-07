@@ -61,8 +61,10 @@ router.get("/project/get", async (req, res) => {
 router.get("/testimonial/get", async (req, res) => {
   try {
     const testimonials = await Testimonial.find()
-      .populate("relatedService")
-      // .populate("relatedUser")
+      .populate("relatedServices")
+      .populate("relatedIndustries")
+      .populate("relatedProducts")
+      .populate("relatedChikfdServices")
       .exec();
     return res.status(200).json({
       success: true,
@@ -111,10 +113,8 @@ router.get("/industry/get", async (req, res) => {
   try {
     const industries = await Industry.find({})
       .populate("relatedServices")
-      .populate("relatedSuccessStory")
       .populate("relatedProducts")
-      .populate("relatedChikfdServices")
-      .populate("relatedProjects");
+      .populate("relatedChikfdServices");
 
     return res.status(200).json({
       success: true,
@@ -397,19 +397,37 @@ router.get("/get/bulk", async (req, res) => {
 
     const dataSources = {
       services: () => Service.find({}),
-      projects: () => Project.find({}),
+      projects: () =>
+        Project.find({})
+          .populate("relatedServices")
+          .populate("relatedProducts")
+          .populate("relatedChikfdServices")
+          .populate("relatedIndustries"),
       industries: () =>
         Industry.find({})
           .populate("relatedServices")
-          .populate("relatedSuccessStory")
           .populate("relatedProducts")
-          .populate("relatedChikfdServices")
-          .populate("relatedProjects"),
-      testimonials: () => Testimonial.find().populate("relatedService"),
+          .populate("relatedChikfdServices"),
+      testimonials: () =>
+        Testimonial.find()
+          .populate("relatedServices")
+          .populate("relatedIndustries")
+          .populate("relatedProducts")
+          .populate("relatedChikfdServices"),
       products: () => ParentService.find({}),
       childServices: () => ChildService.find({}),
-      blogs: () => Blog.find({}),
-      knowledgebase: () => KnowledgeBase.find().populate("relatedServices"),
+      blogs: () =>
+        Blog.find({})
+          .populate("relatedIndustries")
+          .populate("relatedServices")
+          .populate("relatedProducts")
+          .populate("relatedChikfdServices"),
+      knowledgebase: () =>
+        KnowledgeBase.find()
+          .populate("relatedServices")
+          .populate("relatedIndustries")
+          .populate("relatedProducts")
+          .populate("relatedChikfdServices"),
       faqs: () =>
         Faq.find()
           .populate("relatedServices")

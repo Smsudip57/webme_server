@@ -14,7 +14,6 @@ const { route } = require("./user");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
-
 async function processMainImage(newImageUrl, existingImageUrl) {
   let imageToUse = existingImageUrl;
 
@@ -44,7 +43,6 @@ async function processMainImage(newImageUrl, existingImageUrl) {
   return imageToUse;
 }
 
-
 async function processSections(newSections, existingSections) {
   if (!newSections) return existingSections;
 
@@ -66,7 +64,9 @@ async function processSections(newSections, existingSections) {
       }
 
       let sectionImage = section.image;
-      const isNewImage = !existingSections.find(s => s.image === section.image);
+      const isNewImage = !existingSections.find(
+        (s) => s.image === section.image
+      );
 
       // Handle junk image: move to public and delete old
       if (isNewImage && sectionImage.includes("/junk")) {
@@ -76,25 +76,40 @@ async function processSections(newSections, existingSections) {
             try {
               await FileManager.delete(oldSection.image);
             } catch (err) {
-              console.error(`Error deleting old section image (${section.title}):`, err.message);
+              console.error(
+                `Error deleting old section image (${section.title}):`,
+                err.message
+              );
             }
           }
 
-          const sectionImageResult = await FileManager.normal({ url: sectionImage });
+          const sectionImageResult = await FileManager.normal({
+            url: sectionImage,
+          });
           sectionImage = sectionImageResult.url;
         } catch (err) {
-          console.error(`Error moving section image (${section.title}) from junk:`, err.message);
+          console.error(
+            `Error moving section image (${section.title}) from junk:`,
+            err.message
+          );
           throw new Error(`Failed to process section image: ${err.message}`);
         }
       }
       // Handle public image: just delete old if changed
       else if (isNewImage && !sectionImage.includes("/junk")) {
         const oldSection = existingSections[index];
-        if (oldSection && oldSection.image && oldSection.image !== sectionImage) {
+        if (
+          oldSection &&
+          oldSection.image &&
+          oldSection.image !== sectionImage
+        ) {
           try {
             await FileManager.delete(oldSection.image);
           } catch (err) {
-            console.error(`Error deleting old section image (${section.title}):`, err.message);
+            console.error(
+              `Error deleting old section image (${section.title}):`,
+              err.message
+            );
           }
         }
       }
@@ -139,7 +154,6 @@ const upload = multer({ storage });
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
-
 router.post(
   "/testimonial/create",
   upload.fields([
@@ -152,9 +166,9 @@ router.post(
         Testimonial: TestimonialText,
         postedBy,
         role,
-        relatedService,
+        relatedServices,
         relatedIndustries,
-        relatedProduct,
+        relatedProducts,
         relatedChikfdServices,
       } = req.body;
 
@@ -174,15 +188,48 @@ router.post(
       const imageUrl = getFileUrl(req.files.image[0].filename);
       const videoUrl = getFileUrl(req.files.video[0].filename);
 
+      // Helper function to parse related items into arrays
+      const parseRelatedItems = (items) => {
+        if (!items) return [];
+
+        // If it's a string that could be JSON
+        if (typeof items === "string" && items.startsWith("[")) {
+          try {
+            return JSON.parse(items);
+          } catch (e) {
+            // If JSON parsing fails, treat as comma-separated string
+            return items
+              .split(",")
+              .map((id) => id.trim())
+              .filter((id) => id);
+          }
+        }
+        // If it's a comma-separated string
+        else if (typeof items === "string") {
+          return items
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => id);
+        }
+        // If it's already an array
+        else if (Array.isArray(items)) {
+          return items;
+        }
+        // If it's a single ID
+        else {
+          return [items];
+        }
+      };
+
       try {
         const newTestimonial = new Testimonial({
           Testimonial: TestimonialText,
           postedBy,
           role,
-          relatedService,
-          relatedIndustries,
-          relatedProduct,
-          relatedChikfdServices,
+          relatedServices: parseRelatedItems(relatedServices),
+          relatedIndustries: parseRelatedItems(relatedIndustries),
+          relatedProducts: parseRelatedItems(relatedProducts),
+          relatedChikfdServices: parseRelatedItems(relatedChikfdServices),
           image: imageUrl,
           video: videoUrl,
         });
@@ -238,9 +285,9 @@ router.post(
         Testimonial: TestimonialText,
         postedBy,
         role,
-        relatedService,
+        relatedServices,
         relatedIndustries,
-        relatedProduct,
+        relatedProducts,
         relatedChikfdServices,
       } = req.body;
 
@@ -263,12 +310,60 @@ router.post(
       testimonial.postedBy = postedBy || testimonial.postedBy;
       testimonial.role = role || testimonial.role;
 
+      // Helper function to parse related items into arrays
+      const parseRelatedItems = (items, existingItems = []) => {
+        if (!items) return existingItems;
+
+        // If it's a string that could be JSON
+        if (typeof items === "string" && items.startsWith("[")) {
+          try {
+            return JSON.parse(items);
+          } catch (e) {
+            // If JSON parsing fails, treat as comma-separated string
+            return items
+              .split(",")
+              .map((id) => id.trim())
+              .filter((id) => id);
+          }
+        }
+        // If it's a comma-separated string
+        else if (typeof items === "string") {
+          return items
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => id);
+        }
+        // If it's already an array
+        else if (Array.isArray(items)) {
+          return items;
+        }
+        // If it's a single ID
+        else {
+          return [items];
+        }
+      };
+
       // Update relation fields if provided
-      if (relatedService) testimonial.relatedService = relatedService;
-      if (relatedIndustries) testimonial.relatedIndustries = relatedIndustries;
-      if (relatedProduct) testimonial.relatedProduct = relatedProduct;
-      if (relatedChikfdServices)
-        testimonial.relatedChikfdServices = relatedChikfdServices;
+      if (relatedServices !== undefined)
+        testimonial.relatedServices = parseRelatedItems(
+          relatedServices,
+          testimonial.relatedServices
+        );
+      if (relatedIndustries !== undefined)
+        testimonial.relatedIndustries = parseRelatedItems(
+          relatedIndustries,
+          testimonial.relatedIndustries
+        );
+      if (relatedProducts !== undefined)
+        testimonial.relatedProducts = parseRelatedItems(
+          relatedProducts,
+          testimonial.relatedProducts
+        );
+      if (relatedChikfdServices !== undefined)
+        testimonial.relatedChikfdServices = parseRelatedItems(
+          relatedChikfdServices,
+          testimonial.relatedChikfdServices
+        );
 
       // Handle image update if provided
       if (req.files.image) {
@@ -334,10 +429,8 @@ router.post(
         costSaving,
         customerSatisfaction,
         relatedServices,
-        relatedSuccessStory,
         relatedProducts,
         relatedChikfdServices,
-        relatedProjects,
       } = req.body;
 
       const files = req.files; // Access uploaded files
@@ -363,12 +456,18 @@ router.post(
             return JSON.parse(items);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            return items.split(",").map((id) => id.trim()).filter(id => id);
+            return items
+              .split(",")
+              .map((id) => id.trim())
+              .filter((id) => id);
           }
         }
         // If it's a comma-separated string
         else if (typeof items === "string") {
-          return items.split(",").map((id) => id.trim()).filter(id => id);
+          return items
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => id);
         }
         // If it's already an array
         else if (Array.isArray(items)) {
@@ -382,10 +481,10 @@ router.post(
 
       // Process all related items arrays
       const relatedServicesArray = parseRelatedItems(relatedServices);
-      const relatedSuccessStoryArray = parseRelatedItems(relatedSuccessStory);
       const relatedProductsArray = parseRelatedItems(relatedProducts);
-      const relatedChikfdServicesArray = parseRelatedItems(relatedChikfdServices);
-      const relatedProjectsArray = parseRelatedItems(relatedProjects);
+      const relatedChikfdServicesArray = parseRelatedItems(
+        relatedChikfdServices
+      );
 
       const newIndustry = new Industry({
         Title,
@@ -397,10 +496,8 @@ router.post(
         image: imageUrl,
         logo: logoUrl,
         relatedServices: relatedServicesArray,
-        relatedSuccessStory: relatedSuccessStoryArray,
         relatedProducts: relatedProductsArray,
         relatedChikfdServices: relatedChikfdServicesArray,
-        relatedProjects: relatedProjectsArray,
       });
 
       await newIndustry.save();
@@ -437,10 +534,8 @@ router.post(
         costSaving,
         customerSatisfaction,
         relatedServices,
-        relatedSuccessStory,
         relatedProducts,
         relatedChikfdServices,
-        relatedProjects,
       } = req.body;
 
       if (!id || !Title || !Heading || !detail) {
@@ -513,12 +608,18 @@ router.post(
             return JSON.parse(items);
           } catch (e) {
             // If JSON parsing fails, treat as comma-separated string
-            return items.split(",").map((id) => id.trim()).filter(id => id);
+            return items
+              .split(",")
+              .map((id) => id.trim())
+              .filter((id) => id);
           }
         }
         // If it's a comma-separated string
         else if (typeof items === "string") {
-          return items.split(",").map((id) => id.trim()).filter(id => id);
+          return items
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => id);
         }
         // If it's already an array
         else if (Array.isArray(items)) {
@@ -531,11 +632,18 @@ router.post(
       };
 
       // Process all related items arrays with existing values as defaults
-      const relatedServicesArray = parseRelatedItems(relatedServices, industry.relatedServices);
-      const relatedSuccessStoryArray = parseRelatedItems(relatedSuccessStory, industry.relatedSuccessStory);
-      const relatedProductsArray = parseRelatedItems(relatedProducts, industry.relatedProducts);
-      const relatedChikfdServicesArray = parseRelatedItems(relatedChikfdServices, industry.relatedChikfdServices);
-      const relatedProjectsArray = parseRelatedItems(relatedProjects, industry.relatedProjects);
+      const relatedServicesArray = parseRelatedItems(
+        relatedServices,
+        industry.relatedServices
+      );
+      const relatedProductsArray = parseRelatedItems(
+        relatedProducts,
+        industry.relatedProducts
+      );
+      const relatedChikfdServicesArray = parseRelatedItems(
+        relatedChikfdServices,
+        industry.relatedChikfdServices
+      );
 
       // Update fields
       industry.Title = Title;
@@ -550,10 +658,8 @@ router.post(
 
       // Update all related items arrays
       industry.relatedServices = relatedServicesArray;
-      industry.relatedSuccessStory = relatedSuccessStoryArray;
       industry.relatedProducts = relatedProductsArray;
       industry.relatedChikfdServices = relatedChikfdServicesArray;
-      industry.relatedProjects = relatedProjectsArray;
 
       await industry.save();
 
@@ -628,148 +734,149 @@ router.delete("/industry/delete", async (req, res) => {
 
 router.use("/product/create", express.json());
 
-router.post(
-  "/product/create",
-  async (req, res) => {
-    try {
-      // Extract basic product fields
-      const {
-        Title,
-        detail,
-        moreDetail,
-        category,
-        slug,
-        image: mainImageUrl,
-        sections: sectionsJSON,
-      } = req.body;
+router.post("/product/create", async (req, res) => {
+  try {
+    // Extract basic product fields
+    const {
+      Title,
+      detail,
+      moreDetail,
+      category,
+      slug,
+      image: mainImageUrl,
+      sections: sectionsJSON,
+    } = req.body;
 
-      const moduleItem = "Product";
-      if (
-        !Title ||
-        !detail ||
-        !moreDetail ||
-        !category ||
-        !slug ||
-        !sectionsJSON ||
-        !mainImageUrl
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "All fields are required: Title, detail, moreDetail, category, slug, image, sections",
-        });
-      }
-
-      // Validate slug format
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Slug must be lowercase, containing only letters, numbers, and hyphens",
-        });
-      }
-
-      // Check if slug already exists
-      const existingProduct = await ParentService.findOne({ slug });
-      if (existingProduct) {
-        return res.status(400).json({
-          success: false,
-          message: "Slug already exists. Please use a unique slug.",
-        });
-      }
-
-
-      // Expect sections as JSON array, not string
-      if (!Array.isArray(sectionsJSON) || sectionsJSON.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Sections must be a non-empty array",
-        });
-      }
-
-      // Move main image from junk to public using FileManager
-      let finalMainImageUrl = mainImageUrl;
-      try {
-        const mainImageResult = await FileManager.normal({ url: mainImageUrl });
-        finalMainImageUrl = mainImageResult.url;
-      } catch (err) {
-        console.error("Error moving main image from junk:", err.message);
-        throw new Error(`Failed to process main image: ${err.message}`);
-      }
-
-      // Process sections with image movement from junk to public
-      const processedSections = await Promise.all(
-        sectionsJSON.map(async (section) => {
-          // Validate section data
-          if (
-            !section.title ||
-            !Array.isArray(section.points) ||
-            section.points.length === 0
-          ) {
-            throw new Error(
-              `Section ${section.title || "unknown"} is missing required fields`
-            );
-          }
-
-          // Move section image from junk to public using FileManager
-          let sectionImage = section.image;
-          try {
-            const sectionImageResult = await FileManager.normal({ url: sectionImage });
-            sectionImage = sectionImageResult.url;
-          } catch (err) {
-            console.error(`Error moving section image (${section.title}) from junk:`, err.message);
-            throw new Error(`Failed to process section image: ${err.message}`);
-          }
-
-          // Process points
-          const processedPoints = section.points.map((point) => {
-            if (!point.title || !point.detail) {
-              throw new Error(
-                `Point in section ${section.title} is missing title or detail`
-              );
-            }
-            return {
-              title: point.title,
-              detail: point.detail,
-            };
-          });
-
-          return {
-            title: section.title,
-            image: sectionImage,
-            points: processedPoints,
-          };
-        })
-      );
-
-      // Create product with processed data (with moved image URLs)
-      const newProduct = new ParentService({
-        Title,
-        detail,
-        moreDetail,
-        slug,
-        image: finalMainImageUrl,
-        category,
-        sections: processedSections,
-      });
-
-      // Save to database
-      await newProduct.save();
-
-      return res.status(201).json({
-        success: true,
-        message: `${moduleItem} created successfully`,
-        product: newProduct,
-      });
-    } catch (error) {
-      console.error(`Error creating ${moduleItem.toLowerCase()}:`, error);
-      return res.status(500).json({
+    const moduleItem = "Product";
+    if (
+      !Title ||
+      !detail ||
+      !moreDetail ||
+      !category ||
+      !slug ||
+      !sectionsJSON ||
+      !mainImageUrl
+    ) {
+      return res.status(400).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again.",
+        message:
+          "All fields are required: Title, detail, moreDetail, category, slug, image, sections",
       });
     }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Slug must be lowercase, containing only letters, numbers, and hyphens",
+      });
+    }
+
+    // Check if slug already exists
+    const existingProduct = await ParentService.findOne({ slug });
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug already exists. Please use a unique slug.",
+      });
+    }
+
+    // Expect sections as JSON array, not string
+    if (!Array.isArray(sectionsJSON) || sectionsJSON.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Sections must be a non-empty array",
+      });
+    }
+
+    // Move main image from junk to public using FileManager
+    let finalMainImageUrl = mainImageUrl;
+    try {
+      const mainImageResult = await FileManager.normal({ url: mainImageUrl });
+      finalMainImageUrl = mainImageResult.url;
+    } catch (err) {
+      console.error("Error moving main image from junk:", err.message);
+      throw new Error(`Failed to process main image: ${err.message}`);
+    }
+
+    // Process sections with image movement from junk to public
+    const processedSections = await Promise.all(
+      sectionsJSON.map(async (section) => {
+        // Validate section data
+        if (
+          !section.title ||
+          !Array.isArray(section.points) ||
+          section.points.length === 0
+        ) {
+          throw new Error(
+            `Section ${section.title || "unknown"} is missing required fields`
+          );
+        }
+
+        // Move section image from junk to public using FileManager
+        let sectionImage = section.image;
+        try {
+          const sectionImageResult = await FileManager.normal({
+            url: sectionImage,
+          });
+          sectionImage = sectionImageResult.url;
+        } catch (err) {
+          console.error(
+            `Error moving section image (${section.title}) from junk:`,
+            err.message
+          );
+          throw new Error(`Failed to process section image: ${err.message}`);
+        }
+
+        // Process points
+        const processedPoints = section.points.map((point) => {
+          if (!point.title || !point.detail) {
+            throw new Error(
+              `Point in section ${section.title} is missing title or detail`
+            );
+          }
+          return {
+            title: point.title,
+            detail: point.detail,
+          };
+        });
+
+        return {
+          title: section.title,
+          image: sectionImage,
+          points: processedPoints,
+        };
+      })
+    );
+
+    // Create product with processed data (with moved image URLs)
+    const newProduct = new ParentService({
+      Title,
+      detail,
+      moreDetail,
+      slug,
+      image: finalMainImageUrl,
+      category,
+      sections: processedSections,
+    });
+
+    // Save to database
+    await newProduct.save();
+
+    return res.status(201).json({
+      success: true,
+      message: `${moduleItem} created successfully`,
+      product: newProduct,
+    });
+  } catch (error) {
+    console.error(`Error creating ${moduleItem.toLowerCase()}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong. Please try again.",
+    });
   }
-);
+});
 
 router.use("/product/delete", express.json());
 
@@ -798,7 +905,10 @@ router.post("/product/delete", async (req, res) => {
       if (product.image) {
         deleteOps.push(
           FileManager.delete(product.image).catch((e) => {
-            console.error("Failed to delete product main image:", e.message || e);
+            console.error(
+              "Failed to delete product main image:",
+              e.message || e
+            );
           })
         );
       }
@@ -839,109 +949,112 @@ router.post("/product/delete", async (req, res) => {
 });
 
 router.use("/product/edit", express.json());
-router.put(
-  "/product/edit",
-  async (req, res) => {
-    try {
-      const {
-        productId,
-        Title,
-        detail,
-        moreDetail,
-        category,
-        slug,
-        image: mainImageUrl,
-        sections: sectionsJSON,
-      } = req.body;
-      const moduleItem = "Product";
-      // Validate product ID
-      if (!productId) {
-        return res.status(400).json({
-          success: false,
-          message: `${moduleItem} ID is required`,
-        });
-      }
-
-      // Find existing product
-      const existingProduct = await ParentService.findById(productId);
-      if (!existingProduct) {
-        return res.status(404).json({
-          success: false,
-          message: `${moduleItem} not found`,
-        });
-      }
-
-      // Validate slug if provided
-      if (slug) {
-        // Validate slug format
-        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Slug must be lowercase, containing only letters, numbers, and hyphens",
-          });
-        }
-
-        // Check if slug already exists and belongs to a different product
-        if (existingProduct.slug !== slug) {
-          const slugExists = await ParentService.findOne({
-            slug,
-            _id: { $ne: productId },
-          });
-          if (slugExists) {
-            return res.status(400).json({
-              success: false,
-              message: "Slug already exists. Please use a unique slug.",
-            });
-          }
-        }
-      }
-
-      // Process main image using helper function
-      const mainImageUrlToUse = await processMainImage(mainImageUrl, existingProduct.image);
-
-      // Process sections using helper function
-      let updatedSections = existingProduct.sections;
-      if (sectionsJSON) {
-        try {
-          updatedSections = await processSections(sectionsJSON, existingProduct.sections);
-        } catch (err) {
-          return res.status(400).json({
-            success: false,
-            message: err.message || "Error processing sections",
-          });
-        }
-      }
-
-      // Update product with all fields
-      const updatedProduct = await ParentService.findByIdAndUpdate(
-        productId,
-        {
-          Title: Title || existingProduct.Title,
-          detail: detail || existingProduct.detail,
-          moreDetail: moreDetail || existingProduct.moreDetail,
-          slug: slug || existingProduct.slug,
-          image: mainImageUrlToUse,
-          category: category || existingProduct.category,
-          sections: updatedSections,
-        },
-        { new: true, runValidators: true }
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: `${moduleItem} updated successfully`,
-        product: updatedProduct,
-      });
-    } catch (error) {
-      console.error(`Error updating ${moduleItem.toLowerCase()}:`, error);
-      return res.status(500).json({
+router.put("/product/edit", async (req, res) => {
+  try {
+    const {
+      productId,
+      Title,
+      detail,
+      moreDetail,
+      category,
+      slug,
+      image: mainImageUrl,
+      sections: sectionsJSON,
+    } = req.body;
+    const moduleItem = "Product";
+    // Validate product ID
+    if (!productId) {
+      return res.status(400).json({
         success: false,
-        message: error.message || "Something went wrong. Please try again.",
+        message: `${moduleItem} ID is required`,
       });
     }
+
+    // Find existing product
+    const existingProduct = await ParentService.findById(productId);
+    if (!existingProduct) {
+      return res.status(404).json({
+        success: false,
+        message: `${moduleItem} not found`,
+      });
+    }
+
+    // Validate slug if provided
+    if (slug) {
+      // Validate slug format
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Slug must be lowercase, containing only letters, numbers, and hyphens",
+        });
+      }
+
+      // Check if slug already exists and belongs to a different product
+      if (existingProduct.slug !== slug) {
+        const slugExists = await ParentService.findOne({
+          slug,
+          _id: { $ne: productId },
+        });
+        if (slugExists) {
+          return res.status(400).json({
+            success: false,
+            message: "Slug already exists. Please use a unique slug.",
+          });
+        }
+      }
+    }
+
+    // Process main image using helper function
+    const mainImageUrlToUse = await processMainImage(
+      mainImageUrl,
+      existingProduct.image
+    );
+
+    // Process sections using helper function
+    let updatedSections = existingProduct.sections;
+    if (sectionsJSON) {
+      try {
+        updatedSections = await processSections(
+          sectionsJSON,
+          existingProduct.sections
+        );
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message || "Error processing sections",
+        });
+      }
+    }
+
+    // Update product with all fields
+    const updatedProduct = await ParentService.findByIdAndUpdate(
+      productId,
+      {
+        Title: Title || existingProduct.Title,
+        detail: detail || existingProduct.detail,
+        moreDetail: moreDetail || existingProduct.moreDetail,
+        slug: slug || existingProduct.slug,
+        image: mainImageUrlToUse,
+        category: category || existingProduct.category,
+        sections: updatedSections,
+      },
+      { new: true, runValidators: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `${moduleItem} updated successfully`,
+      product: updatedProduct,
+    });
+  } catch (error) {
+    console.error(`Error updating ${moduleItem.toLowerCase()}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong. Please try again.",
+    });
   }
-);
+});
 
 router.use("/child/create", express.json());
 router.post("/child/create", async (req, res) => {
@@ -1050,10 +1163,15 @@ router.post("/child/create", async (req, res) => {
         // Move section image from junk to public using FileManager
         let sectionImage = section.image;
         try {
-          const sectionImageResult = await FileManager.normal({ url: sectionImage });
+          const sectionImageResult = await FileManager.normal({
+            url: sectionImage,
+          });
           sectionImage = sectionImageResult.url;
         } catch (err) {
-          console.error(`Error moving section image (${section.title}) from junk:`, err.message);
+          console.error(
+            `Error moving section image (${section.title}) from junk:`,
+            err.message
+          );
           throw new Error(`Failed to process section image: ${err.message}`);
         }
 
@@ -1262,13 +1380,19 @@ router.put("/child/edit", async (req, res) => {
     }
 
     // Process main image using helper function
-    const imageToUse = await processMainImage(image, existingChildService.image);
+    const imageToUse = await processMainImage(
+      image,
+      existingChildService.image
+    );
 
     // Validate and process sections using helper function
     let updatedSections = existingChildService.sections;
     if (sections) {
       try {
-        updatedSections = await processSections(sections, existingChildService.sections);
+        updatedSections = await processSections(
+          sections,
+          existingChildService.sections
+        );
       } catch (err) {
         return res.status(400).json({
           success: false,

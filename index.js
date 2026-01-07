@@ -10,6 +10,7 @@ const chat = require("./routes/chatSession");
 const payment = require("./routes/payment");
 const parentServices = require("./routes/parentServices");
 const childServices = require("./routes/childServices");
+const industries = require("./routes/industries");
 const auth = require("./middlewares/adminAuth");
 const filesRouter = require("./routes/files.js");
 const cookieParser = require("cookie-parser");
@@ -69,6 +70,7 @@ app.use("/api/payment", payment);
 app.use("/api/chat", chat);
 app.use("/api/v1", parentServices);
 app.use("/api/v1", childServices);
+app.use("/api/v1", industries);
 
 app.use((req, res, next) => {
   console.log(`Path hit: ${req.originalUrl}`);

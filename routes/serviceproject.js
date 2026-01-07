@@ -302,9 +302,8 @@ router.post("/project/create", async (req, res) => {
         : fields.mediaType || "image";
 
       // Parse related items as arrays
-
-
       const relatedServices = ensureArray(fields.relatedServices);
+      const relatedIndustries = ensureArray(fields.relatedIndustries);
       const relatedProducts = ensureArray(fields.relatedProducts);
       const relatedChikfdServices = ensureArray(fields.relatedChikfdServices);
 
@@ -333,19 +332,6 @@ router.post("/project/create", async (req, res) => {
           success: false,
           message:
             "A project with this slug already exists. Please use a unique slug.",
-        });
-      }
-
-      // Validate that at least one related item is provided
-      const totalRelatedItems =
-        relatedServices.length +
-        relatedProducts.length +
-        relatedChikfdServices.length;
-      if (totalRelatedItems === 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "At least one related service, product, or child service is required.",
         });
       }
 
@@ -433,8 +419,9 @@ router.post("/project/create", async (req, res) => {
 
           for (const imageFile of imageFilesArray) {
             if (imageFile && imageFile.filepath) {
-              const imageFilename = `${Date.now()}-${imageFile.originalFilename
-                }`;
+              const imageFilename = `${Date.now()}-${
+                imageFile.originalFilename
+              }`;
               const imagePath = path.join(form.uploadDir, imageFilename);
 
               try {
@@ -465,16 +452,16 @@ router.post("/project/create", async (req, res) => {
             fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
           )
             ? fields[
-            `section[${sectionIndex}][points][${pointIndex}][title]`
-            ][0]
+                `section[${sectionIndex}][points][${pointIndex}][title]`
+              ][0]
             : fields[`section[${sectionIndex}][points][${pointIndex}][title]`];
 
           const pointDetail = Array.isArray(
             fields[`section[${sectionIndex}][points][${pointIndex}][detail]`]
           )
             ? fields[
-            `section[${sectionIndex}][points][${pointIndex}][detail]`
-            ][0]
+                `section[${sectionIndex}][points][${pointIndex}][detail]`
+              ][0]
             : fields[`section[${sectionIndex}][points][${pointIndex}][detail]`];
 
           if (pointTitle && pointDetail) {
@@ -504,6 +491,7 @@ router.post("/project/create", async (req, res) => {
         slug,
         detail,
         relatedServices,
+        relatedIndustries,
         relatedProducts,
         relatedChikfdServices,
         media: {
@@ -582,6 +570,7 @@ router.post("/project/edit", async (req, res) => {
         : fields.mediaType || existingProject.media.type;
 
       const relatedServices = ensureArray(fields.relatedServices);
+      const relatedIndustries = ensureArray(fields.relatedIndustries);
       const relatedProducts = ensureArray(fields.relatedProducts);
       const relatedChikfdServices = ensureArray(fields.relatedChikfdServices);
 
@@ -614,19 +603,6 @@ router.post("/project/edit", async (req, res) => {
               "A project with this slug already exists. Please use a unique slug.",
           });
         }
-      }
-
-      // Validate that at least one related item is provided
-      const totalRelatedItems =
-        relatedServices.length +
-        relatedProducts.length +
-        relatedChikfdServices.length;
-      if (totalRelatedItems === 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "At least one related service, product, or child service is required.",
-        });
       }
 
       // Validate related services exist (if any provided)
@@ -675,6 +651,7 @@ router.post("/project/edit", async (req, res) => {
       existingProject.slug = slug;
       existingProject.detail = detail;
       existingProject.relatedServices = relatedServices;
+      existingProject.relatedIndustries = relatedIndustries;
       existingProject.relatedProducts = relatedProducts;
       existingProject.relatedChikfdServices = relatedChikfdServices;
 
@@ -783,21 +760,21 @@ router.post("/project/edit", async (req, res) => {
               fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
             )
               ? fields[
-              `section[${sectionIndex}][points][${pointIndex}][title]`
-              ][0]
+                  `section[${sectionIndex}][points][${pointIndex}][title]`
+                ][0]
               : fields[
-              `section[${sectionIndex}][points][${pointIndex}][title]`
-              ];
+                  `section[${sectionIndex}][points][${pointIndex}][title]`
+                ];
 
             const pointDetail = Array.isArray(
               fields[`section[${sectionIndex}][points][${pointIndex}][detail]`]
             )
               ? fields[
-              `section[${sectionIndex}][points][${pointIndex}][detail]`
-              ][0]
+                  `section[${sectionIndex}][points][${pointIndex}][detail]`
+                ][0]
               : fields[
-              `section[${sectionIndex}][points][${pointIndex}][detail]`
-              ];
+                  `section[${sectionIndex}][points][${pointIndex}][detail]`
+                ];
 
             if (pointTitle && pointDetail) {
               points.push({
@@ -959,7 +936,8 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
     if (!type || !title || !description || !contents || !image) {
       return res.status(400).json({
         success: false,
-        message: "Type, title, description, contents, and image are required fields",
+        message:
+          "Type, title, description, contents, and image are required fields",
       });
     }
 
@@ -972,7 +950,7 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
     }
 
     // Basic validation for non-empty contents (after stripping HTML tags)
-    const textContent = contents.replace(/<[^>]*>/g, '').trim();
+    const textContent = contents.replace(/<[^>]*>/g, "").trim();
     if (textContent.length === 0) {
       return res.status(400).json({
         success: false,
@@ -981,18 +959,22 @@ router.post("/blog/create", upload.single("image"), async (req, res) => {
     }
 
     // Parse related items if they're sent as strings
-    const parsedRelatedServices = typeof relatedServices === "string"
-      ? JSON.parse(relatedServices)
-      : relatedServices || [];
-    const parsedRelatedIndustries = typeof relatedIndustries === "string"
-      ? JSON.parse(relatedIndustries)
-      : relatedIndustries || [];
-    const parsedRelatedProducts = typeof relatedProducts === "string"
-      ? JSON.parse(relatedProducts)
-      : relatedProducts || [];
-    const parsedRelatedChikfdServices = typeof relatedChikfdServices === "string"
-      ? JSON.parse(relatedChikfdServices)
-      : relatedChikfdServices || [];
+    const parsedRelatedServices =
+      typeof relatedServices === "string"
+        ? JSON.parse(relatedServices)
+        : relatedServices || [];
+    const parsedRelatedIndustries =
+      typeof relatedIndustries === "string"
+        ? JSON.parse(relatedIndustries)
+        : relatedIndustries || [];
+    const parsedRelatedProducts =
+      typeof relatedProducts === "string"
+        ? JSON.parse(relatedProducts)
+        : relatedProducts || [];
+    const parsedRelatedChikfdServices =
+      typeof relatedChikfdServices === "string"
+        ? JSON.parse(relatedChikfdServices)
+        : relatedChikfdServices || [];
 
     const newBlog = new Blog({
       type,
@@ -1058,31 +1040,35 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
 
     // Parse and update related items if provided
     if (relatedServices !== undefined) {
-      const parsedRelatedServices = typeof relatedServices === "string"
-        ? JSON.parse(relatedServices)
-        : relatedServices || [];
+      const parsedRelatedServices =
+        typeof relatedServices === "string"
+          ? JSON.parse(relatedServices)
+          : relatedServices || [];
       blog.relatedServices = parsedRelatedServices;
     }
 
     console.log(typeof relatedIndustries === "string");
     if (relatedIndustries !== undefined) {
-      const parsedRelatedIndustries = typeof relatedIndustries === "string"
-        ? JSON.parse(relatedIndustries)
-        : relatedIndustries || [];
+      const parsedRelatedIndustries =
+        typeof relatedIndustries === "string"
+          ? JSON.parse(relatedIndustries)
+          : relatedIndustries || [];
       blog.relatedIndustries = parsedRelatedIndustries;
     }
 
     if (relatedProducts !== undefined) {
-      const parsedRelatedProducts = typeof relatedProducts === "string"
-        ? JSON.parse(relatedProducts)
-        : relatedProducts || [];
+      const parsedRelatedProducts =
+        typeof relatedProducts === "string"
+          ? JSON.parse(relatedProducts)
+          : relatedProducts || [];
       blog.relatedProducts = parsedRelatedProducts;
     }
 
     if (relatedChikfdServices !== undefined) {
-      const parsedRelatedChikfdServices = typeof relatedChikfdServices === "string"
-        ? JSON.parse(relatedChikfdServices)
-        : relatedChikfdServices || [];
+      const parsedRelatedChikfdServices =
+        typeof relatedChikfdServices === "string"
+          ? JSON.parse(relatedChikfdServices)
+          : relatedChikfdServices || [];
       blog.relatedChikfdServices = parsedRelatedChikfdServices;
     }
 
@@ -1116,7 +1102,7 @@ router.post("/blog/edit", upload.single("image"), async (req, res) => {
       }
 
       // Basic validation for non-empty contents (after stripping HTML tags)
-      const textContent = contents.replace(/<[^>]*>/g, '').trim();
+      const textContent = contents.replace(/<[^>]*>/g, "").trim();
       if (textContent.length === 0) {
         return res.status(400).json({
           success: false,
@@ -1197,7 +1183,8 @@ router.post("/blog/delete", async (req, res) => {
   }
 });
 
-router.post("/knowledgebase/create",
+router.post(
+  "/knowledgebase/create",
   upload.single("Image"),
   async (req, res) => {
     try {
@@ -1214,12 +1201,7 @@ router.post("/knowledgebase/create",
       } = req.body;
 
       // Check required fields
-      if (
-        !title ||
-        !introduction ||
-        !contents ||
-        !req.file
-      ) {
+      if (!title || !introduction || !contents || !req.file) {
         return res.status(400).json({
           success: false,
           message:
@@ -1239,7 +1221,7 @@ router.post("/knowledgebase/create",
       }
 
       // Basic validation for non-empty contents (after stripping HTML tags)
-      const textContent = contents.replace(/<[^>]*>/g, '').trim();
+      const textContent = contents.replace(/<[^>]*>/g, "").trim();
       if (textContent.length === 0) {
         return res.status(400).json({
           success: false,
@@ -1377,7 +1359,7 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
       }
 
       // Basic validation for non-empty contents (after stripping HTML tags)
-      const textContent = contents.replace(/<[^>]*>/g, '').trim();
+      const textContent = contents.replace(/<[^>]*>/g, "").trim();
       if (textContent.length === 0) {
         return res.status(400).json({
           success: false,
@@ -1722,7 +1704,6 @@ router.post(
         };
       });
 
-
       if (!req.body.relatedServices) {
         return res.status(400).json({
           success: false,
@@ -1730,16 +1711,14 @@ router.post(
         });
       }
 
-      const relatedServiceId = typeof req.body.relatedServices === 'string'
-        ? new mongoose.Types.ObjectId(req.body.relatedServices)
-        : req.body.relatedServices;
-
-
+      const relatedServiceId =
+        typeof req.body.relatedServices === "string"
+          ? new mongoose.Types.ObjectId(req.body.relatedServices)
+          : req.body.relatedServices;
 
       const existingDetails = await ServiceDetails.find({
         relatedServices: relatedServiceId,
       });
-
 
       if (existingDetails && existingDetails.length > 0) {
         const deleteResult = await ServiceDetails.deleteMany({

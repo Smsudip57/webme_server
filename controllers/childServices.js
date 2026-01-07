@@ -126,7 +126,7 @@ const getSingleChildService = async (req, res) => {
     const relatedTestimonials = await Testimonial.find({
       relatedChikfdServices: childServiceId,
     })
-      .populate("relatedService")
+      .populate("relatedServices")
       .populate("relatedIndustries")
       .populate("relatedProducts")
       .populate("relatedChikfdServices")

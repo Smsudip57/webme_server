@@ -1,48 +1,55 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const testimonialSchema = new mongoose.Schema(
-  {
-    Testimonial: {
-      type: String,
-      required: [true, 'Testimonial is required'],
-      trim: true,
-    },
-    video: {
-      type: String,
-      required: [true, 'Video is required'],
-    },
-    image: {
-      type: String,
-      required: [true, 'Image is required'],
-    },
-    postedBy: {
-      type: String,
-      required: [true, 'Author name is required'],
-    },
-    role: {
-      type: String,
-      required: [true, 'Role of the author is required'],
-    },
-    relatedService: {
+const testimonialSchema = new mongoose.Schema({
+  Testimonial: {
+    type: String,
+    required: [true, "Testimonial is required"],
+    trim: true,
+  },
+  video: {
+    type: String,
+    required: [true, "Video is required"],
+  },
+  image: {
+    type: String,
+    required: [true, "Image is required"],
+  },
+  postedBy: {
+    type: String,
+    required: [true, "Author name is required"],
+  },
+  role: {
+    type: String,
+    required: [true, "Role of the author is required"],
+  },
+  relatedServices: [
+    {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Service'
+      ref: "Service",
     },
-    relatedIndustries: {
+  ],
+  relatedIndustries: [
+    {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Industry'
+      ref: "Industry",
     },
-    relatedProducts: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Parentservice'
+  ],
+  relatedProducts: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Parentservice",
     },
-    relatedChikfdServices: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Childservices'
+  ],
+  relatedChikfdServices: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Childservices",
     },
-  }
-);
+  ],
+});
 
-
-const Testimonial = mongoose.models.Testimonial || mongoose.model('Testimonial', testimonialSchema);
+const Testimonial =
+  mongoose.models.Testimonial ||
+  mongoose.model("Testimonial", testimonialSchema);
 
 module.exports = Testimonial;
