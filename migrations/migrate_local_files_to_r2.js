@@ -55,11 +55,17 @@ function getR2Client() {
 }
 
 function getR2PublicUrl(key) {
-  if (!process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN) {
-    throw new Error("CLOUDFLARE_R2_CUSTOM_DOMAIN missing in environment variables");
+  // If a custom domain is configured, prefer it. Otherwise fall back
+  // to the Cloudflare-account-provided S3-compatible hostname.
+  if (process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN) {
+    return `https://${process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN}/${key}`;
   }
 
-  return `https://${process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN}/${key}`;
+  if (!process.env.CLOUDFLARE_R2_ACCOUNT_ID) {
+    throw new Error("CLOUDFLARE_R2_CUSTOM_DOMAIN and CLOUDFLARE_R2_ACCOUNT_ID are missing in environment variables");
+  }
+
+  return `https://${process.env.CLOUDFLARE_R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${key}`;
 }
 
 function getMimeType(fileName) {
@@ -215,7 +221,9 @@ async function main() {
   await mongoose.connect(MONGO_URI);
   await loadAllModels();
 
-  const s3Client = getR2Client();
+  // Avoid creating an S3 client when doing a dry-run to allow running
+  // the dry-run without valid R2 credentials. Real uploads still require creds.
+  const s3Client = dryRun ? null : getR2Client();
   const modelNames = mongoose.modelNames();
   const uploadCache = new Map(); // filename -> r2 url
 
