@@ -13,6 +13,7 @@
  * Usage:
  *   node migrations/migrate_local_files_to_r2.js --dry-run
  *   node migrations/migrate_local_files_to_r2.js --execute
+ *   node migrations/migrate_local_files_to_r2.js --test
  */
 
 require("dotenv").config();
@@ -28,7 +29,8 @@ const PUBLIC_DIR = path.resolve(process.cwd(), "public");
 const PUBLIC_JUNK_DIR = path.resolve(PUBLIC_DIR, "junk");
 
 const args = new Set(process.argv.slice(2));
-const dryRun = !args.has("--execute");
+const testMode = args.has("--test");
+const dryRun = args.has("--dry-run") || (!args.has("--execute") && !testMode);
 
 const ALLOWED_EXT = new Set([
   ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".ico", ".jfif", ".bmp", ".tif", ".tiff", ".avif",
@@ -198,6 +200,11 @@ async function uploadToR2(localFilePath, fileName, s3Client) {
   return getR2PublicUrl(key);
 }
 
+async function verifyPublicUrl(url) {
+  const response = await fetch(url, { method: "HEAD" });
+  return response.ok;
+}
+
 async function loadAllModels() {
   const modelsDir = path.resolve(__dirname, "../models");
   const files = await fsp.readdir(modelsDir);
@@ -215,6 +222,9 @@ async function main() {
   }
 
   console.log(`Mode: ${dryRun ? "DRY RUN" : "EXECUTE"}`);
+  if (testMode) {
+    console.log("Test mode: will upload only one file and exit after printing the public URL");
+  }
   console.log(`Mongo URI: ${MONGO_URI}`);
   console.log(`Public dir: ${PUBLIC_DIR}`);
 
@@ -275,6 +285,16 @@ async function main() {
             try {
               r2Url = await uploadToR2(localFilePath, fileName, s3Client);
               summary.filesUploaded += 1;
+
+              if (testMode) {
+                const publicUrlOk = await verifyPublicUrl(r2Url);
+                console.log(`\n[Test] Uploaded file: ${fileName}`);
+                console.log(`[Test] Public URL: ${r2Url}`);
+                console.log(`[Test] Public URL accessible: ${publicUrlOk ? "YES" : "NO"}`);
+
+                await mongoose.disconnect();
+                process.exit(publicUrlOk ? 0 : 2);
+              }
             } catch (err) {
               summary.uploadErrors += 1;
               console.error(`  Upload failed for ${fileName}: ${err.message}`);
