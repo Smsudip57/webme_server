@@ -251,6 +251,7 @@ async function main() {
     filesUploaded: 0,
     localFilesMissing: 0,
     skippedNonFileValues: 0,
+    skippedAlreadyMigrated: 0,
     uploadErrors: 0,
   };
 
@@ -270,6 +271,15 @@ async function main() {
       let docDirty = false;
 
       for (const entry of stringValues) {
+        const raw = normalizeUrl(entry.value);
+
+        // Check if already migrated (already points to R2 or custom domain)
+        if (raw.includes("r2.cloudflarestorage.com") ||
+          (process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN && raw.includes(process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN))) {
+          summary.skippedAlreadyMigrated += 1;
+          continue;
+        }
+
         const fileName = extractCandidateFilename(entry.value);
         if (!fileName) {
           summary.skippedNonFileValues += 1;
@@ -292,14 +302,21 @@ async function main() {
               r2Url = await uploadToR2(localFilePath, fileName, s3Client);
               summary.filesUploaded += 1;
 
+              // Verify file is publicly accessible before updating DB
+              const publicUrlOk = await verifyPublicUrl(r2Url);
               if (testMode) {
-                const publicUrlOk = await verifyPublicUrl(r2Url);
                 console.log(`\n[Test] Uploaded file: ${fileName}`);
                 console.log(`[Test] Public URL: ${r2Url}`);
                 console.log(`[Test] Public URL accessible: ${publicUrlOk ? "YES" : "NO"}`);
 
                 await mongoose.disconnect();
                 process.exit(publicUrlOk ? 0 : 2);
+              }
+
+              if (!publicUrlOk) {
+                console.warn(`  [Verify] File uploaded but not yet accessible: ${fileName}`);
+                console.warn(`  [Verify] Skipping DB update for this file; you may need to retry after DNS propagation.`);
+                continue;
               }
             } catch (err) {
               summary.uploadErrors += 1;
