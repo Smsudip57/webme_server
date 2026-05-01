@@ -276,6 +276,27 @@ router.get("/search", async (req, res) => {
         .json({ success: false, message: "Search query is required" });
     }
 
+    // Tokenize search query into individual words
+    const tokens = search
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((token) => token.length > 0);
+
+    // Create regex patterns for each token - matches any word that contains the token
+    const tokenRegexes = tokens.map((token) => new RegExp(token, "i"));
+
+    // Helper function to build MongoDB query for multiple fields and tokens
+    const buildTokenQuery = (fields) => {
+      return {
+        $or: fields.flatMap((field) =>
+          tokenRegexes.map((regex) => ({
+            [field]: { $regex: regex.source, $options: "i" },
+          }))
+        ),
+      };
+    };
+
     // Perform searches across all models in parallel
     const [
       services,
@@ -287,65 +308,25 @@ router.get("/search", async (req, res) => {
       testimonials,
     ] = await Promise.all([
       // Search in services
-      Service.find({
-        $or: [
-          { Title: { $regex: search, $options: "i" } },
-          { deltail: { $regex: search, $options: "i" } },
-          { moreDetail: { $regex: search, $options: "i" } },
-        ],
-      }),
+      Service.find(buildTokenQuery(["Title", "deltail", "moreDetail"])),
 
       // Search in child services
-      ChildService.find({
-        $or: [
-          { Title: { $regex: search, $options: "i" } },
-          { detail: { $regex: search, $options: "i" } },
-          { moreDetail: { $regex: search, $options: "i" } },
-        ],
-      }),
+      ChildService.find(buildTokenQuery(["Title", "detail", "moreDetail"])),
 
       // Search in blogs
-      Blog.find({
-        $or: [
-          { title: { $regex: search, $options: "i" } },
-          { description: { $regex: search, $options: "i" } },
-          { type: { $regex: search, $options: "i" } },
-        ],
-      }),
+      Blog.find(buildTokenQuery(["title", "description", "type"])),
 
       // Search in knowledge base
-      KnowledgeBase.find({
-        $or: [
-          { title: { $regex: search, $options: "i" } },
-          { introduction: { $regex: search, $options: "i" } },
-          { contents: { $regex: search, $options: "i" } },
-        ],
-      }),
+      KnowledgeBase.find(buildTokenQuery(["title", "introduction", "contents"])),
 
       // Search in projects
-      Project.find({
-        $or: [
-          { Title: { $regex: search, $options: "i" } },
-          { detail: { $regex: search, $options: "i" } },
-        ],
-      }),
+      Project.find(buildTokenQuery(["Title", "detail"])),
 
       // Search in products
-      ChildService.find({
-        $or: [
-          { Title: { $regex: search, $options: "i" } },
-          { detail: { $regex: search, $options: "i" } },
-        ],
-      }),
+      ChildService.find(buildTokenQuery(["Title", "detail"])),
 
       // Search in testimonials
-      Testimonial.find({
-        $or: [
-          { Testimonial: { $regex: search, $options: "i" } },
-          { postedBy: { $regex: search, $options: "i" } },
-          { role: { $regex: search, $options: "i" } },
-        ],
-      }),
+      Testimonial.find(buildTokenQuery(["Testimonial", "postedBy", "role"])),
     ]);
 
     const searchResults = {
