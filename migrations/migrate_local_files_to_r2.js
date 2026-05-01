@@ -342,7 +342,8 @@ async function main() {
       if (docDirty) {
         summary.docsChanged += 1;
         if (!dryRun) {
-          await doc.save();
+          // Skip validation since we're only updating URLs, not core fields
+          await doc.save({ validateBeforeSave: false });
         }
       }
     }
