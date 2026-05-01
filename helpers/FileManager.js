@@ -117,9 +117,11 @@ class FileManager {
   static getR2PublicUrl(key) {
     if (process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN) {
       return `https://${process.env.CLOUDFLARE_R2_CUSTOM_DOMAIN}/${key}`;
-    }
-    else{
-      throw new Error("CLOUDFLARE_R2_CUSTOM_DOMAIN missing in environment variables for public URL generation");
+    } else {
+      // Fall back to default S3-compatible endpoint
+      const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME;
+      const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
+      return `https://${bucketName}.${accountId}.r2.cloudflarestorage.com/${key}`;
     }
   }
 
