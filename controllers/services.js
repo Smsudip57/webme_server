@@ -1,4 +1,6 @@
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
 const Service = require("../models/service");
 const ParentService = require("../models/Parentservice");
 const ChildService = require("../models/childService");
@@ -11,6 +13,9 @@ const Faq = require("../models/faq");
 const Booking = require("../models/bookings");
 const BookingAvailability = require("../models/bookingAvailability");
 const ServiceDetails = require("../models/servicedetails");
+const { FileManager } = require("../helpers/FileManager");
+
+
 
 // GET all services
 const getAllServices = async (req, res) => {
@@ -214,7 +219,194 @@ const getSingleService = async (req, res) => {
   }
 };
 
+// CREATE a new service
+const createService = async (req, res) => {
+  try {
+    const { Title, Name, detail, moreDetail, category, slug } = req.body;
+    const bodyImage = typeof req.body.image === "string" ? req.body.image : "";
+    const imageUrl = bodyImage ? (await FileManager.normal({ url: bodyImage })).url : "";
+
+    if (
+      !Title ||
+      !Name ||
+      !detail ||
+      !moreDetail ||
+      !category ||
+      !imageUrl ||
+      !slug
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "All fields are required" });
+    }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Slug must be lowercase, containing only letters, numbers, and hyphens",
+      });
+    }
+
+    // Check if slug already exists
+    const existingService = await Service.findOne({ slug });
+    if (existingService) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A service with this slug already exists. Please use a unique slug.",
+      });
+    }
+
+    const newService = new Service({
+      Title,
+      Name,
+      slug,
+      deltail: detail,
+      moreDetail,
+      category,
+      image: imageUrl,
+    });
+
+    await newService.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Service created successfully",
+      service: newService,
+    });
+  } catch (error) {
+    console.error("Error creating service:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// EDIT an existing service
+const editService = async (req, res) => {
+  try {
+    const { serviceId, Title, Name, deltail, moreDetail, category, slug } =
+      req.body;
+    const bodyImage = typeof req.body.image === "string" ? req.body.image : "";
+    const resolvedBodyImage = bodyImage ? (await FileManager.normal({ url: bodyImage })).url : "";
+
+    if (
+      !serviceId ||
+      !Title ||
+      !Name ||
+      !deltail ||
+      !category ||
+      !moreDetail ||
+      !slug
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required.",
+      });
+    }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Slug must be lowercase, containing only letters, numbers, and hyphens",
+      });
+    }
+
+    const service = await Service.findById(serviceId);
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found.",
+      });
+    }
+
+    // Check if slug already exists and belongs to a different service
+    if (service.slug !== slug) {
+      const existingService = await Service.findOne({ slug });
+      if (existingService && existingService._id.toString() !== serviceId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "A service with this slug already exists. Please use a unique slug.",
+        });
+      }
+    }
+
+    service.Title = Title;
+    service.Name = Name;
+    service.slug = slug;
+    service.deltail = deltail;
+    service.category = category;
+    service.moreDetail = moreDetail;
+
+    if (resolvedBodyImage) {
+      service.image = resolvedBodyImage;
+    }
+
+    await service.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Service updated successfully.",
+      service: service,
+    });
+  } catch (error) {
+    console.error("Error updating service:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
+// DELETE a service
+const deleteService = async (req, res) => {
+  try {
+    const { serviceId } = req.body;
+    if (!serviceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Service ID is required",
+      });
+    }
+
+    const service = await Service.findById(serviceId);
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found",
+      });
+    }
+
+    if (service.image) {
+      try {
+        await FileManager.delete(service.image);
+      } catch (err) {
+        console.error(`Error deleting image: ${err.message}`);
+      }
+    }
+
+    await Service.findByIdAndDelete(serviceId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Service deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting service:", error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while deleting the service",
+    });
+  }
+};
+
 module.exports = {
   getAllServices,
   getSingleService,
+  createService,
+  editService,
+  deleteService,
 };

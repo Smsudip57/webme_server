@@ -8,6 +8,7 @@ const User = require("../models/user");
 const Service = require("../models/service");
 const ParentService = require("../models/Parentservice");
 const ChildService = require("../models/childService");
+const { FileManager } = require("../helpers/FileManager");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const UPLOAD_DIR = path.join(process.cwd(), "public");
@@ -34,6 +35,8 @@ const storage = multer.diskStorage({
 const getImageUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
 const upload = multer({ storage });
+
+
 
 // Image upload endpoint
 router.post("/upload/image", upload.single("image"), async (req, res) => {
@@ -66,11 +69,12 @@ router.post("/upload/image", upload.single("image"), async (req, res) => {
 
 router.post(
   "/service/createservice",
-  upload.single("image"),
+  express.json(),
   async (req, res) => {
     try {
       const { Title, Name, detail, moreDetail, category, slug } = req.body;
-      const file = req.file;
+      const bodyImage = typeof req.body.image === "string" ? req.body.image : "";
+      const imageUrl = bodyImage ? (await FileManager.normal({ url: bodyImage })).url : "";
 
       if (
         !Title ||
@@ -78,7 +82,7 @@ router.post(
         !detail ||
         !moreDetail ||
         !category ||
-        !file ||
+        !imageUrl ||
         !slug
       ) {
         return res
@@ -105,8 +109,6 @@ router.post(
         });
       }
 
-      const imageUrl = getImageUrl(file.filename);
-      console.log(imageUrl);
       const newService = new Service({
         Title,
         Name,
@@ -131,9 +133,7 @@ router.post(
   }
 );
 
-router.use("/service/deleteservice", express.json());
-
-router.post("/service/deleteservice", async (req, res) => {
+router.post("/service/deleteservice", express.json(), async (req, res) => {
   try {
     const { serviceId } = req.body;
     if (!serviceId) {
@@ -152,16 +152,11 @@ router.post("/service/deleteservice", async (req, res) => {
     }
 
     if (service.image) {
-      const imagePath = path.join(
-        process.cwd(),
-        "public",
-        service.image.split("/").pop()
-      );
-      fs.unlink(imagePath, (err) => {
-        if (err) {
-          console.error(`Error deleting image file: ${err.message}`);
-        }
-      });
+      try {
+        await FileManager.delete(service.image);
+      } catch (err) {
+        console.error(`Error deleting image: ${err.message}`);
+      }
     }
 
     await Service.findByIdAndDelete(serviceId);
@@ -180,12 +175,13 @@ router.post("/service/deleteservice", async (req, res) => {
 });
 router.post(
   "/service/editservice",
-  upload.single("image"),
+  express.json(),
   async (req, res) => {
     try {
       const { serviceId, Title, Name, deltail, moreDetail, category, slug } =
         req.body;
-      const file = req.file;
+      const bodyImage = typeof req.body.image === "string" ? req.body.image : "";
+      const resolvedBodyImage = bodyImage ? (await FileManager.normal({ url: bodyImage })).url : "";
 
       if (
         !serviceId ||
@@ -238,25 +234,7 @@ router.post(
       service.category = category;
       service.moreDetail = moreDetail;
 
-      if (file) {
-        if (service.image) {
-          const imagePath = path.join(
-            process.cwd(),
-            "public",
-            service.image.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(imagePath)) {
-              fs.unlinkSync(imagePath);
-            }
-          } catch (err) {
-            console.error("Error deleting old image:", err);
-          }
-        }
-
-        const imageUrl = getImageUrl(file.filename);
-        service.image = imageUrl;
-      }
+      if (resolvedBodyImage) service.image = resolvedBodyImage;
 
       await service.save();
 
@@ -275,246 +253,173 @@ router.post(
   }
 );
 
-router.post("/project/create", async (req, res) => {
+router.post("/project/create", express.json(), async (req, res) => {
   try {
-    const form = new formidable.IncomingForm({ multiples: true }); // Enable handling multiple files
-    form.uploadDir = UPLOAD_DIR;
-    form.keepExtensions = true;
+    const { Title, detail, slug, mediaType, mediaUrl, relatedServices, relatedIndustries, relatedProducts, relatedChikfdServices, sections } = req.body;
 
-    form.parse(req, async (err, fields, files) => {
-      if (err) {
-        console.error("Formidable error:", err);
-        return res
-          .status(500)
-          .json({ success: false, message: "Error parsing form data." });
-      }
+    // Validate required fields
+    if (!Title || !detail || !mediaUrl || !slug) {
+      return res.status(400).json({
+        success: false,
+        message: "Title, detail, mediaUrl, and slug are required.",
+      });
+    }
 
-      // Extract basic fields
-      const Title = Array.isArray(fields.Title)
-        ? fields.Title[0]
-        : fields.Title;
-      const detail = Array.isArray(fields.detail)
-        ? fields.detail[0]
-        : fields.detail;
-      const slug = Array.isArray(fields.slug) ? fields.slug[0] : fields.slug;
-      const mediaType = Array.isArray(fields.mediaType)
-        ? fields.mediaType[0]
-        : fields.mediaType || "image";
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug must be lowercase, containing only letters, numbers, and hyphens",
+      });
+    }
 
-      // Parse related items as arrays
-      const relatedServices = ensureArray(fields.relatedServices);
-      const relatedIndustries = ensureArray(fields.relatedIndustries);
-      const relatedProducts = ensureArray(fields.relatedProducts);
-      const relatedChikfdServices = ensureArray(fields.relatedChikfdServices);
+    // Check if slug already exists
+    const existingProject = await Project.findOne({ slug });
+    if (existingProject) {
+      return res.status(400).json({
+        success: false,
+        message: "A project with this slug already exists. Please use a unique slug.",
+      });
+    }
 
-      // Validate required fields
-      const hasMediaFile = files.media && files.media[0];
-      if (!Title || !detail || !hasMediaFile || !slug) {
-        return res.status(400).json({
-          success: false,
-          message: "Title, detail, media file, and slug are required.",
-        });
-      }
-
-      // Validate slug format
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Slug must be lowercase, containing only letters, numbers, and hyphens",
-        });
-      }
-
-      // Check if slug already exists
-      const existingProject = await Project.findOne({ slug });
-      if (existingProject) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "A project with this slug already exists. Please use a unique slug.",
-        });
-      }
-
-      // Validate related services exist (if any provided)
-      if (relatedServices.length > 0) {
-        for (const serviceId of relatedServices) {
-          const serviceExists = await Service.findById(serviceId);
-          if (!serviceExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Related service with ID ${serviceId} does not exist.`,
-            });
-          }
+    // Parse related items as arrays (handle both string and array formats)
+    const parseRelatedItems = (items) => {
+      if (!items) return [];
+      if (typeof items === 'string') {
+        try {
+          return JSON.parse(items);
+        } catch {
+          return [items];
         }
       }
+      return Array.isArray(items) ? items : [items];
+    };
 
-      // Validate related products exist (if any provided)
-      if (relatedProducts.length > 0) {
-        for (const productId of relatedProducts) {
-          const productExists = await ParentService.findById(productId);
-          if (!productExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Related product with ID ${productId} does not exist.`,
-            });
-          }
+    const parsedServices = parseRelatedItems(relatedServices);
+    const parsedIndustries = parseRelatedItems(relatedIndustries);
+    const parsedProducts = parseRelatedItems(relatedProducts);
+    const parsedChildServices = parseRelatedItems(relatedChikfdServices);
+
+    // Validate related services exist (if any provided)
+    if (parsedServices.length > 0) {
+      for (const serviceId of parsedServices) {
+        const serviceExists = await Service.findById(serviceId);
+        if (!serviceExists) {
+          return res.status(400).json({
+            success: false,
+            message: `Related service with ID ${serviceId} does not exist.`,
+          });
         }
       }
+    }
 
-      // Validate related child services exist (if any provided)
-      if (relatedChikfdServices.length > 0) {
-        for (const childServiceId of relatedChikfdServices) {
-          const childServiceExists = await ChildService.findById(
-            childServiceId
-          );
-          if (!childServiceExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Related child service with ID ${childServiceId} does not exist.`,
-            });
-          }
+    // Validate related products exist (if any provided)
+    if (parsedProducts.length > 0) {
+      for (const productId of parsedProducts) {
+        const productExists = await ParentService.findById(productId);
+        if (!productExists) {
+          return res.status(400).json({
+            success: false,
+            message: `Related product with ID ${productId} does not exist.`,
+          });
         }
       }
+    }
 
-      // Process media file
-      const mediaFile = files.media[0];
-      if (!mediaFile.filepath) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Media file upload failed." });
-      }
-
-      const mediaFilename = `${Date.now()}-${mediaFile.originalFilename}`;
-      const mediaPath = path.join(form.uploadDir, mediaFilename);
-
-      try {
-        fs.renameSync(mediaFile.filepath, mediaPath);
-      } catch (error) {
-        console.error("Error moving media file:", error);
-        return res
-          .status(500)
-          .json({ success: false, message: "Error saving media file." });
-      }
-
-      const mediaUrl = getImageUrl(mediaFilename);
-
-      // Extract sections
-      const sections = [];
-      let sectionIndex = 0;
-
-      while (fields[`section[${sectionIndex}][title]`]) {
-        const title = Array.isArray(fields[`section[${sectionIndex}][title]`])
-          ? fields[`section[${sectionIndex}][title]`][0]
-          : fields[`section[${sectionIndex}][title]`];
-
-        // Process section images (multiple)
-        const sectionImages = [];
-        const sectionImageFiles = files[`section[${sectionIndex}][image]`];
-
-        if (sectionImageFiles) {
-          // Ensure sectionImageFiles is always treated as an array
-          const imageFilesArray = Array.isArray(sectionImageFiles)
-            ? sectionImageFiles
-            : [sectionImageFiles];
-
-          for (const imageFile of imageFilesArray) {
-            if (imageFile && imageFile.filepath) {
-              const imageFilename = `${Date.now()}-${
-                imageFile.originalFilename
-              }`;
-              const imagePath = path.join(form.uploadDir, imageFilename);
-
-              try {
-                fs.renameSync(imageFile.filepath, imagePath);
-                sectionImages.push(getImageUrl(imageFilename));
-              } catch (error) {
-                console.error(
-                  `Error moving section ${sectionIndex} image:`,
-                  error
-                );
-                return res.status(500).json({
-                  success: false,
-                  message: `Error saving image for section ${sectionIndex}.`,
-                });
-              }
-            }
-          }
+    // Validate related child services exist (if any provided)
+    if (parsedChildServices.length > 0) {
+      for (const childServiceId of parsedChildServices) {
+        const childServiceExists = await ChildService.findById(childServiceId);
+        if (!childServiceExists) {
+          return res.status(400).json({
+            success: false,
+            message: `Related child service with ID ${childServiceId} does not exist.`,
+          });
         }
+      }
+    }
 
-        // Process points
-        const points = [];
-        let pointIndex = 0;
+    // Promote main media from junk to permanent
+    let promotedMediaUrl;
+    try {
+      const mediaResult = await FileManager.normal({ url: mediaUrl });
+      promotedMediaUrl = mediaResult.url;
+    } catch (error) {
+      console.error("Error promoting media file:", error);
+      return res.status(400).json({
+        success: false,
+        message: "Media file not found in temporary storage. Please re-upload.",
+      });
+    }
 
-        while (
-          fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
-        ) {
-          const pointTitle = Array.isArray(
-            fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
-          )
-            ? fields[
-                `section[${sectionIndex}][points][${pointIndex}][title]`
-              ][0]
-            : fields[`section[${sectionIndex}][points][${pointIndex}][title]`];
-
-          const pointDetail = Array.isArray(
-            fields[`section[${sectionIndex}][points][${pointIndex}][detail]`]
-          )
-            ? fields[
-                `section[${sectionIndex}][points][${pointIndex}][detail]`
-              ][0]
-            : fields[`section[${sectionIndex}][points][${pointIndex}][detail]`];
-
-          if (pointTitle && pointDetail) {
-            points.push({
-              title: pointTitle,
-              detail: pointDetail,
-            });
-          }
-
-          pointIndex++;
-        }
-
-        if (title && sectionImages.length > 0 && points.length > 0) {
-          sections.push({
-            title,
-            image: sectionImages, // Now storing an array of image URLs
-            points,
+    // Process sections and promote images
+    const processedSections = [];
+    if (sections && Array.isArray(sections)) {
+      for (const section of sections) {
+        if (!section.title || !section.image) {
+          return res.status(400).json({
+            success: false,
+            message: "Each section must have a title and image.",
           });
         }
 
-        sectionIndex++;
-      }
+        if (!section.points || section.points.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Each section must have at least one point.",
+          });
+        }
 
-      // Save project to database
-      const newProject = new Project({
-        Title,
-        slug,
-        detail,
-        relatedServices,
-        relatedIndustries,
-        relatedProducts,
-        relatedChikfdServices,
-        media: {
-          url: mediaUrl,
-          type: mediaType,
-        },
-        section: sections,
-      });
+        // Promote section image from junk to permanent
+        let promotedImageUrl;
+        try {
+          const imageResult = await FileManager.normal({ url: section.image });
+          promotedImageUrl = imageResult.url;
+        } catch (error) {
+          console.error(`Error promoting section image for "${section.title}":`, error);
+          return res.status(400).json({
+            success: false,
+            message: `Section image for "${section.title}" not found in temporary storage.`,
+          });
+        }
 
-      try {
-        await newProject.save();
-        return res.status(201).json({
-          success: true,
-          message: "Project created successfully.",
-        });
-      } catch (saveError) {
-        console.error("Error saving project to DB:", saveError);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to save project to the database.",
+        processedSections.push({
+          title: section.title,
+          image: promotedImageUrl,
+          points: section.points,
         });
       }
+    }
+
+    // Save project to database
+    const newProject = new Project({
+      Title,
+      slug,
+      detail,
+      relatedServices: parsedServices,
+      relatedIndustries: parsedIndustries,
+      relatedProducts: parsedProducts,
+      relatedChikfdServices: parsedChildServices,
+      media: {
+        url: promotedMediaUrl,
+        type: mediaType || "image",
+      },
+      section: processedSections,
     });
+
+    try {
+      await newProject.save();
+      return res.status(201).json({
+        success: true,
+        message: "Project created successfully.",
+      });
+    } catch (saveError) {
+      console.error("Error saving project to DB:", saveError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to save project to the database.",
+      });
+    }
   } catch (error) {
     console.error("Error creating project:", error);
     return res.status(500).json({
@@ -524,320 +429,200 @@ router.post("/project/create", async (req, res) => {
   }
 });
 
-router.post("/project/edit", async (req, res) => {
+router.post("/project/edit", express.json(), async (req, res) => {
   try {
-    const form = new formidable.IncomingForm({ multiples: true });
-    form.uploadDir = UPLOAD_DIR;
-    form.keepExtensions = true;
+    const { _id, Title, detail, slug, mediaType, mediaUrl, relatedServices, relatedIndustries, relatedProducts, relatedChikfdServices, sections } = req.body;
 
-    form.parse(req, async (err, fields, files) => {
-      if (err) {
-        console.error("Formidable error:", err);
-        return res
-          .status(500)
-          .json({ success: false, message: "Error parsing form data." });
-      }
+    if (!_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Project ID is required.",
+      });
+    }
 
-      // Extract project ID
-      const projectId = Array.isArray(fields._id) ? fields._id[0] : fields._id;
+    // Find existing project
+    const existingProject = await Project.findById(_id);
+    if (!existingProject) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found.",
+      });
+    }
 
-      if (!projectId) {
+    // Validate required fields
+    if (!Title || !detail || !slug) {
+      return res.status(400).json({
+        success: false,
+        message: "Title, detail, and slug are required.",
+      });
+    }
+
+    // Validate slug format
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug must be lowercase, containing only letters, numbers, and hyphens",
+      });
+    }
+
+    // Check if slug already exists and belongs to a different project
+    if (slug !== existingProject.slug) {
+      const slugExists = await Project.findOne({
+        slug,
+        _id: { $ne: _id },
+      });
+      if (slugExists) {
         return res.status(400).json({
           success: false,
-          message: "Project ID is required.",
+          message: "A project with this slug already exists. Please use a unique slug.",
         });
       }
+    }
 
-      // Find existing project
-      const existingProject = await Project.findById(projectId);
-      if (!existingProject) {
-        return res.status(404).json({
-          success: false,
-          message: "Project not found.",
-        });
+    // Parse related items
+    const parseRelatedItems = (items) => {
+      if (!items) return [];
+      if (typeof items === 'string') {
+        try {
+          return JSON.parse(items);
+        } catch {
+          return [items];
+        }
       }
+      return Array.isArray(items) ? items : [items];
+    };
 
-      // Extract basic fields
-      const Title = Array.isArray(fields.Title)
-        ? fields.Title[0]
-        : fields.Title;
-      const detail = Array.isArray(fields.detail)
-        ? fields.detail[0]
-        : fields.detail;
-      const slug = Array.isArray(fields.slug) ? fields.slug[0] : fields.slug;
-      const mediaType = Array.isArray(fields.mediaType)
-        ? fields.mediaType[0]
-        : fields.mediaType || existingProject.media.type;
+    const parsedServices = parseRelatedItems(relatedServices);
+    const parsedIndustries = parseRelatedItems(relatedIndustries);
+    const parsedProducts = parseRelatedItems(relatedProducts);
+    const parsedChildServices = parseRelatedItems(relatedChikfdServices);
 
-      const relatedServices = ensureArray(fields.relatedServices);
-      const relatedIndustries = ensureArray(fields.relatedIndustries);
-      const relatedProducts = ensureArray(fields.relatedProducts);
-      const relatedChikfdServices = ensureArray(fields.relatedChikfdServices);
-
-      if (!Title || !detail || !slug) {
-        return res.status(400).json({
-          success: false,
-          message: "Title, detail, and slug are required.",
-        });
-      }
-
-      // Validate slug format
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Slug must be lowercase, containing only letters, numbers, and hyphens",
-        });
-      }
-
-      // Check if slug already exists and belongs to a different project
-      if (slug !== existingProject.slug) {
-        const slugExists = await Project.findOne({
-          slug,
-          _id: { $ne: projectId },
-        });
-        if (slugExists) {
+    // Validate related services exist
+    if (parsedServices.length > 0) {
+      for (const serviceId of parsedServices) {
+        const serviceExists = await Service.findById(serviceId);
+        if (!serviceExists) {
           return res.status(400).json({
             success: false,
-            message:
-              "A project with this slug already exists. Please use a unique slug.",
+            message: `Related service with ID ${serviceId} does not exist.`,
           });
         }
       }
+    }
 
-      // Validate related services exist (if any provided)
-      if (relatedServices.length > 0) {
-        for (const serviceId of relatedServices) {
-          const serviceExists = await Service.findById(serviceId);
-          if (!serviceExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Related service with ID ${serviceId} does not exist.`,
-            });
-          }
-        }
-      }
-
-      // Validate related products exist (if any provided)
-      if (relatedProducts.length > 0) {
-        for (const productId of relatedProducts) {
-          const productExists = await ParentService.findById(productId);
-          if (!productExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Related product with ID ${productId} does not exist.`,
-            });
-          }
-        }
-      }
-
-      // Validate related child services exist (if any provided)
-      if (relatedChikfdServices.length > 0) {
-        for (const childServiceId of relatedChikfdServices) {
-          const childServiceExists = await ChildService.findById(
-            childServiceId
-          );
-          if (!childServiceExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Related child service with ID ${childServiceId} does not exist.`,
-            });
-          }
-        }
-      }
-
-      // Update basic project fields
-      existingProject.Title = Title;
-      existingProject.slug = slug;
-      existingProject.detail = detail;
-      existingProject.relatedServices = relatedServices;
-      existingProject.relatedIndustries = relatedIndustries;
-      existingProject.relatedProducts = relatedProducts;
-      existingProject.relatedChikfdServices = relatedChikfdServices;
-
-      // Process media file if provided
-      if (files.media && files.media[0]) {
-        const mediaFile = files.media[0];
-        if (mediaFile.filepath) {
-          const mediaFilename = `${Date.now()}-${mediaFile.originalFilename}`;
-          const mediaPath = path.join(form.uploadDir, mediaFilename);
-
-          try {
-            // Delete old media file if it exists
-            if (existingProject.media && existingProject.media.url) {
-              const oldMediaPath = path.join(
-                UPLOAD_DIR,
-                existingProject.media.url.split("/").pop()
-              );
-              if (fs.existsSync(oldMediaPath)) {
-                fs.unlinkSync(oldMediaPath);
-              }
-            }
-
-            // Save new media file
-            fs.renameSync(mediaFile.filepath, mediaPath);
-            existingProject.media.url = getImageUrl(mediaFilename);
-            existingProject.media.type = mediaType;
-          } catch (error) {
-            console.error("Error processing media file:", error);
-            return res
-              .status(500)
-              .json({ success: false, message: "Error saving media file." });
-          }
-        }
-      } else {
-        // Update media type even if no new file is uploaded
-        existingProject.media.type = mediaType;
-      }
-
-      // Process sections
-      if (fields["section[0][title]"]) {
-        const sections = [];
-        let sectionIndex = 0;
-
-        while (fields[`section[${sectionIndex}][title]`]) {
-          const title = Array.isArray(fields[`section[${sectionIndex}][title]`])
-            ? fields[`section[${sectionIndex}][title]`][0]
-            : fields[`section[${sectionIndex}][title]`];
-
-          // Process section images
-          // Handle keeping existing images
-          let sectionImages = [];
-
-          // Get images to keep from existing section
-          const keepImagesKeys = Object.keys(fields).filter((key) =>
-            key.startsWith(`section[${sectionIndex}][keepImages]`)
-          );
-
-          for (const key of keepImagesKeys) {
-            const imageUrl = Array.isArray(fields[key])
-              ? fields[key][0]
-              : fields[key];
-            if (imageUrl) {
-              sectionImages.push(imageUrl);
-            }
-          }
-
-          // Process new uploaded images
-          const sectionImageKeys = Object.keys(files).filter((key) =>
-            key.startsWith(`section[${sectionIndex}][image]`)
-          );
-
-          for (const key of sectionImageKeys) {
-            const imageFile = files[key];
-            // Handle both single file and array of files
-            const imageFiles = Array.isArray(imageFile)
-              ? imageFile
-              : [imageFile];
-
-            for (const file of imageFiles) {
-              if (file && file.filepath) {
-                const imageFilename = `${Date.now()}-${file.originalFilename}`;
-                const imagePath = path.join(form.uploadDir, imageFilename);
-
-                try {
-                  fs.renameSync(file.filepath, imagePath);
-                  sectionImages.push(getImageUrl(imageFilename));
-                } catch (error) {
-                  console.error(`Error processing section image:`, error);
-                  return res.status(500).json({
-                    success: false,
-                    message: `Error saving image for section ${sectionIndex}.`,
-                  });
-                }
-              }
-            }
-          }
-
-          // Process points for this section
-          const points = [];
-          let pointIndex = 0;
-
-          while (
-            fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
-          ) {
-            const pointTitle = Array.isArray(
-              fields[`section[${sectionIndex}][points][${pointIndex}][title]`]
-            )
-              ? fields[
-                  `section[${sectionIndex}][points][${pointIndex}][title]`
-                ][0]
-              : fields[
-                  `section[${sectionIndex}][points][${pointIndex}][title]`
-                ];
-
-            const pointDetail = Array.isArray(
-              fields[`section[${sectionIndex}][points][${pointIndex}][detail]`]
-            )
-              ? fields[
-                  `section[${sectionIndex}][points][${pointIndex}][detail]`
-                ][0]
-              : fields[
-                  `section[${sectionIndex}][points][${pointIndex}][detail]`
-                ];
-
-            if (pointTitle && pointDetail) {
-              points.push({
-                title: pointTitle,
-                detail: pointDetail,
-              });
-            }
-
-            pointIndex++;
-          }
-
-          // Validate section has required fields
-          if (title && sectionImages.length > 0 && points.length > 0) {
-            sections.push({
-              title,
-              image: sectionImages,
-              points,
-            });
-          } else {
-            // Log what's missing for debugging
-            const missing = [];
-            if (!title) missing.push("title");
-            if (sectionImages.length === 0) missing.push("images");
-            if (points.length === 0) missing.push("points");
-
-            console.warn(
-              `Section ${sectionIndex} is missing required fields: ${missing.join(
-                ", "
-              )}`
-            );
-          }
-
-          sectionIndex++;
-        }
-
-        // Replace sections if we have new ones
-        if (sections.length > 0) {
-          existingProject.section = sections;
-        } else {
+    // Validate related products exist
+    if (parsedProducts.length > 0) {
+      for (const productId of parsedProducts) {
+        const productExists = await ParentService.findById(productId);
+        if (!productExists) {
           return res.status(400).json({
             success: false,
-            message:
-              "At least one complete section with title, image, and points is required.",
+            message: `Related product with ID ${productId} does not exist.`,
           });
         }
       }
+    }
 
+    // Validate related child services exist
+    if (parsedChildServices.length > 0) {
+      for (const childServiceId of parsedChildServices) {
+        const childServiceExists = await ChildService.findById(childServiceId);
+        if (!childServiceExists) {
+          return res.status(400).json({
+            success: false,
+            message: `Related child service with ID ${childServiceId} does not exist.`,
+          });
+        }
+      }
+    }
+
+    // Update basic fields
+    existingProject.Title = Title;
+    existingProject.slug = slug;
+    existingProject.detail = detail;
+    existingProject.relatedServices = parsedServices;
+    existingProject.relatedIndustries = parsedIndustries;
+    existingProject.relatedProducts = parsedProducts;
+    existingProject.relatedChikfdServices = parsedChildServices;
+
+    // Update media if provided
+    if (mediaUrl) {
       try {
-        await existingProject.save();
-        return res.status(200).json({
-          success: true,
-          message: "Project updated successfully.",
-          project: existingProject,
-        });
-      } catch (saveError) {
-        console.error("Error saving updated project:", saveError);
-        return res.status(500).json({
+        const mediaResult = await FileManager.normal({ url: mediaUrl });
+
+        // Delete old media if exists
+        if (existingProject.media && existingProject.media.url) {
+          try {
+            await FileManager.delete(existingProject.media.url);
+          } catch (error) {
+            console.error("Error deleting old media:", error);
+          }
+        }
+
+        existingProject.media.url = mediaResult.url;
+        existingProject.media.type = mediaType || "image";
+      } catch (error) {
+        console.error("Error promoting media file:", error);
+        return res.status(400).json({
           success: false,
-          message: "Failed to save project updates to the database.",
-          error: saveError.message,
+          message: "Media file not found in temporary storage.",
         });
       }
-    });
+    }
+
+    // Update sections if provided
+    if (sections && Array.isArray(sections) && sections.length > 0) {
+      const processedSections = [];
+
+      for (const section of sections) {
+        if (!section.title || !section.image || !section.points || section.points.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Each section must have a title, image, and at least one point.",
+          });
+        }
+
+        // Promote section image from junk if it's a junk URL
+        let promotedImageUrl = section.image;
+
+        if (section.image && section.image.includes('/junk/')) {
+          try {
+            const imageResult = await FileManager.normal({ url: section.image });
+            promotedImageUrl = imageResult.url;
+          } catch (error) {
+            console.error(`Error promoting section image for "${section.title}":`, error);
+            return res.status(400).json({
+              success: false,
+              message: `Section image for "${section.title}" not found in temporary storage.`,
+            });
+          }
+        }
+
+        processedSections.push({
+          title: section.title,
+          image: promotedImageUrl,
+          points: section.points,
+        });
+      }
+
+      existingProject.section = processedSections;
+    }
+
+    try {
+      await existingProject.save();
+      return res.status(200).json({
+        success: true,
+        message: "Project updated successfully.",
+        project: existingProject,
+      });
+    } catch (saveError) {
+      console.error("Error saving updated project:", saveError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to save project updates to the database.",
+        error: saveError.message,
+      });
+    }
   } catch (error) {
     console.error("Error updating project:", error);
     return res.status(500).json({
@@ -1185,7 +970,7 @@ router.post("/blog/delete", async (req, res) => {
 
 router.post(
   "/knowledgebase/create",
-  upload.single("Image"),
+  express.json(),
   async (req, res) => {
     try {
       const {
@@ -1197,11 +982,12 @@ router.post(
         relatedIndustries,
         relatedProducts,
         relatedChikfdServices,
+        Image,
         status = "draft",
       } = req.body;
 
       // Check required fields
-      if (!title || !introduction || !contents || !req.file) {
+      if (!title || !introduction || !contents || !Image) {
         return res.status(400).json({
           success: false,
           message:
@@ -1209,8 +995,8 @@ router.post(
         });
       }
 
-      // Get image URL
-      const imageUrl = getImageUrl(req.file.filename);
+      // Promote image from junk to permanent storage
+      const imageUrl = (await FileManager.normal({ url: Image })).url;
 
       // Validate that contents is a string (HTML content)
       if (typeof contents !== "string") {
@@ -1286,7 +1072,7 @@ router.post(
   }
 );
 
-router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
+router.post("/knowledgebase/edit", express.json(), async (req, res) => {
   try {
     const {
       articleId,
@@ -1298,6 +1084,7 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
       relatedIndustries,
       relatedProducts,
       relatedChikfdServices,
+      Image,
       status,
     } = req.body;
 
@@ -1317,25 +1104,26 @@ router.post("/knowledgebase/edit", upload.single("Image"), async (req, res) => {
       });
     }
 
-    // Handle image update
-    if (req.file) {
-      // If there's an existing image, delete it
-      if (article.Image) {
-        const oldImagePath = path.join(
-          process.cwd(),
-          "public",
-          article.Image.split("/").pop()
-        );
-        try {
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlinkSync(oldImagePath);
+    // Handle image update - promote from junk if needed
+    if (Image && Image !== article.Image) {
+      try {
+        // Delete old image
+        if (article.Image) {
+          try {
+            await FileManager.delete(article.Image);
+          } catch (err) {
+            console.error("Error deleting old article image:", err.message);
           }
-        } catch (err) {
-          console.error("Error deleting old article image:", err);
         }
+        // Promote new image from junk
+        article.Image = (await FileManager.normal({ url: Image })).url;
+      } catch (err) {
+        console.error("Error processing image:", err.message);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to process image.",
+        });
       }
-      // Set new image URL
-      article.Image = getImageUrl(req.file.filename);
     }
 
     // Parse tags if provided
@@ -1688,21 +1476,26 @@ router.post("/faq/delete", async (req, res) => {
 
 router.post(
   "/servicedetails/create",
-  upload.array("images"),
+  express.json(),
   async (req, res) => {
     try {
-      const uploadedFiles = req.files.map(
-        (file) => `${process.env.Current_Url}/${file.filename}`
-      );
-
       const parsedSections = JSON.parse(req.body.sections);
 
-      const sectionsWithImages = parsedSections.map((section, index) => {
-        return {
-          ...section,
-          image: uploadedFiles[index] || section.image,
-        };
-      });
+      // Promote all section images from junk to permanent storage
+      const sectionsWithImages = await Promise.all(
+        parsedSections.map(async (section) => {
+          if (section.image) {
+            try {
+              const promotedUrl = (await FileManager.normal({ url: section.image })).url;
+              return { ...section, image: promotedUrl };
+            } catch (err) {
+              console.error("Error processing section image:", err.message);
+              throw new Error(`Failed to process image for section: ${section.title}`);
+            }
+          }
+          return section;
+        })
+      );
 
       if (!req.body.relatedServices) {
         return res.status(400).json({

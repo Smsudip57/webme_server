@@ -156,16 +156,15 @@ const getFileUrl = (filename) => `${process.env.Current_Url}/${filename}`;
 
 router.post(
   "/testimonial/create",
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
+  express.json(),
   async (req, res) => {
     try {
       const {
         Testimonial: TestimonialText,
         postedBy,
         role,
+        image,
+        video,
         relatedServices,
         relatedIndustries,
         relatedProducts,
@@ -176,8 +175,8 @@ router.post(
         !TestimonialText ||
         !postedBy ||
         !role ||
-        !req.files.image ||
-        !req.files.video
+        !image ||
+        !video
       ) {
         return res.status(400).json({
           success: false,
@@ -185,8 +184,16 @@ router.post(
         });
       }
 
-      const imageUrl = getFileUrl(req.files.image[0].filename);
-      const videoUrl = getFileUrl(req.files.video[0].filename);
+      // Promote files from junk to permanent storage
+      const imageUrl = image ? (await FileManager.normal({ url: image })).url : "";
+      const videoUrl = video ? (await FileManager.normal({ url: video })).url : "";
+
+      if (!imageUrl || !videoUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "Failed to process image or video.",
+        });
+      }
 
       // Helper function to parse related items into arrays
       const parseRelatedItems = (items) => {
@@ -221,52 +228,30 @@ router.post(
         }
       };
 
-      try {
-        const newTestimonial = new Testimonial({
-          Testimonial: TestimonialText,
-          postedBy,
-          role,
-          relatedServices: parseRelatedItems(relatedServices),
-          relatedIndustries: parseRelatedItems(relatedIndustries),
-          relatedProducts: parseRelatedItems(relatedProducts),
-          relatedChikfdServices: parseRelatedItems(relatedChikfdServices),
-          image: imageUrl,
-          video: videoUrl,
-        });
+      const newTestimonial = new Testimonial({
+        Testimonial: TestimonialText,
+        postedBy,
+        role,
+        relatedServices: parseRelatedItems(relatedServices),
+        relatedIndustries: parseRelatedItems(relatedIndustries),
+        relatedProducts: parseRelatedItems(relatedProducts),
+        relatedChikfdServices: parseRelatedItems(relatedChikfdServices),
+        image: imageUrl,
+        video: videoUrl,
+      });
 
-        await newTestimonial.save();
+      await newTestimonial.save();
 
-        return res.status(201).json({
-          success: true,
-          message: "Testimonial created successfully",
-          testimonial: newTestimonial,
-        });
-      } catch (dbError) {
-        console.error("Error saving to database:", dbError);
-
-        // Delete files if database save fails
-        if (req.files.image)
-          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
-        if (req.files.video)
-          fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
-
-        return res.status(500).json({
-          success: false,
-          message: "Error saving testimonial data. Files deleted.",
-        });
-      }
+      return res.status(201).json({
+        success: true,
+        message: "Testimonial created successfully",
+        testimonial: newTestimonial,
+      });
     } catch (error) {
-      console.error("Unexpected error:", error);
-
-      // Delete files if any other error occurs
-      if (req.files.image)
-        fs.unlinkSync(path.join(UPLOAD_DIR, req.files.image[0].filename));
-      if (req.files.video)
-        fs.unlinkSync(path.join(UPLOAD_DIR, req.files.video[0].filename));
-
+      console.error("Error creating testimonial:", error);
       return res.status(500).json({
         success: false,
-        message: "Unexpected error occurred while creating testimonial.",
+        message: "Something went wrong. Please try again.",
       });
     }
   }
@@ -274,10 +259,7 @@ router.post(
 
 router.post(
   "/testimonial/edit",
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
+  express.json(),
   async (req, res) => {
     try {
       const {
@@ -285,6 +267,8 @@ router.post(
         Testimonial: TestimonialText,
         postedBy,
         role,
+        image,
+        video,
         relatedServices,
         relatedIndustries,
         relatedProducts,
@@ -365,36 +349,48 @@ router.post(
           testimonial.relatedChikfdServices
         );
 
-      // Handle image update if provided
-      if (req.files.image) {
-        if (testimonial.image) {
-          const oldImagePath = path.join(
-            UPLOAD_DIR,
-            testimonial.image.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(oldImagePath)) fs.unlinkSync(oldImagePath);
-          } catch (err) {
-            console.error("Error deleting old image:", err);
+      // Handle image update - promote from junk if needed
+      if (image && image !== testimonial.image) {
+        try {
+          // Delete old image
+          if (testimonial.image) {
+            try {
+              await FileManager.delete(testimonial.image);
+            } catch (err) {
+              console.error("Error deleting old image:", err.message);
+            }
           }
+          // Promote new image from junk
+          testimonial.image = (await FileManager.normal({ url: image })).url;
+        } catch (err) {
+          console.error("Error processing image:", err.message);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to process image.",
+          });
         }
-        testimonial.image = getFileUrl(req.files.image[0].filename);
       }
 
-      // Handle video update if provided
-      if (req.files.video) {
-        if (testimonial.video) {
-          const oldVideoPath = path.join(
-            UPLOAD_DIR,
-            testimonial.video.split("/").pop()
-          );
-          try {
-            if (fs.existsSync(oldVideoPath)) fs.unlinkSync(oldVideoPath);
-          } catch (err) {
-            console.error("Error deleting old video:", err);
+      // Handle video update - promote from junk if needed
+      if (video && video !== testimonial.video) {
+        try {
+          // Delete old video
+          if (testimonial.video) {
+            try {
+              await FileManager.delete(testimonial.video);
+            } catch (err) {
+              console.error("Error deleting old video:", err.message);
+            }
           }
+          // Promote new video from junk
+          testimonial.video = (await FileManager.normal({ url: video })).url;
+        } catch (err) {
+          console.error("Error processing video:", err.message);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to process video.",
+          });
         }
-        testimonial.video = getFileUrl(req.files.video[0].filename);
       }
 
       await testimonial.save();
@@ -415,10 +411,7 @@ router.post(
 
 router.post(
   "/industry/create",
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "logo", maxCount: 1 },
-  ]),
+  express.json(),
   async (req, res) => {
     try {
       const {
@@ -428,23 +421,30 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
+        image,
+        logo,
         relatedServices,
         relatedProducts,
         relatedChikfdServices,
       } = req.body;
 
-      const files = req.files; // Access uploaded files
-      const image = files.image ? files.image[0] : null;
-      const logo = files.logo ? files.logo[0] : null;
       if (!Title || !Heading || !detail || !image || !logo) {
         return res.status(400).json({
           success: false,
-          message: "Title, Heading, detail, and image are required.",
+          message: "Title, Heading, detail, image, and logo are required.",
         });
       }
 
-      const imageUrl = getImageUrl(image.filename);
-      const logoUrl = getImageUrl(logo.filename);
+      // Promote images from junk to permanent storage
+      const imageUrl = image ? (await FileManager.normal({ url: image })).url : "";
+      const logoUrl = logo ? (await FileManager.normal({ url: logo })).url : "";
+
+      if (!imageUrl || !logoUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "Failed to process image or logo.",
+        });
+      }
 
       // Helper function to parse related items
       const parseRelatedItems = (items) => {
@@ -519,10 +519,7 @@ router.post(
 
 router.post(
   "/industry/edit",
-  upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "logo", maxCount: 1 },
-  ]),
+  express.json(),
   async (req, res) => {
     try {
       const {
@@ -533,6 +530,8 @@ router.post(
         Efficiency,
         costSaving,
         customerSatisfaction,
+        image,
+        logo,
         relatedServices,
         relatedProducts,
         relatedChikfdServices,
@@ -553,48 +552,50 @@ router.post(
         });
       }
 
-      const files = req.files; // Access uploaded files
-      const image = files.image ? files.image[0] : null;
-      const logo = files.logo ? files.logo[0] : null;
-
       let imageUrl = industry.image; // Default to existing image
       let logoUrl = industry.logo; // Default to existing logo
 
-      // Handle image update
-      if (image) {
-        imageUrl = getImageUrl(image.filename);
-
-        // Delete the old image if it exists
+      // Handle image update - promote from junk if needed
+      if (image && image !== industry.image) {
         try {
-          const oldImagePath = path.join(
-            process.cwd(),
-            "public",
-            industry.image.split("/").pop()
-          );
-          if (industry.image && fs.existsSync(oldImagePath)) {
-            await fs.promises.unlink(oldImagePath);
+          // Delete old image
+          if (industry.image) {
+            try {
+              await FileManager.delete(industry.image);
+            } catch (err) {
+              console.error("Error deleting old image:", err.message);
+            }
           }
-        } catch (error) {
-          console.log("Error deleting old image:", error);
+          // Promote new image from junk
+          imageUrl = (await FileManager.normal({ url: image })).url;
+        } catch (err) {
+          console.error("Error processing image:", err.message);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to process image.",
+          });
         }
       }
 
-      // Handle logo update
-      if (logo) {
-        logoUrl = getImageUrl(logo.filename);
-
-        // Delete the old logo if it exists
+      // Handle logo update - promote from junk if needed
+      if (logo && logo !== industry.logo) {
         try {
-          const oldLogoPath = path.join(
-            process.cwd(),
-            "public",
-            industry.logo.split("/").pop()
-          );
-          if (industry.logo && fs.existsSync(oldLogoPath)) {
-            await fs.promises.unlink(oldLogoPath);
+          // Delete old logo
+          if (industry.logo) {
+            try {
+              await FileManager.delete(industry.logo);
+            } catch (err) {
+              console.error("Error deleting old logo:", err.message);
+            }
           }
-        } catch (error) {
-          console.log("Error deleting old logo:", error);
+          // Promote new logo from junk
+          logoUrl = (await FileManager.normal({ url: logo })).url;
+        } catch (err) {
+          console.error("Error processing logo:", err.message);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to process logo.",
+          });
         }
       }
 

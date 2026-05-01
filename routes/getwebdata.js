@@ -24,6 +24,7 @@ router.get("/service/getservice", async (req, res) => {
     return res.status(200).json({
       success: true,
       services,
+      data: services,
     });
   } catch (error) {
     console.error("Error fetching services:", error);
