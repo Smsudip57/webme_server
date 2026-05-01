@@ -201,8 +201,14 @@ async function uploadToR2(localFilePath, fileName, s3Client) {
 }
 
 async function verifyPublicUrl(url) {
-  const response = await fetch(url, { method: "HEAD" });
-  return response.ok;
+  try {
+    const response = await fetch(url, { method: "HEAD", timeout: 5000 });
+    return response.ok;
+  } catch (err) {
+    // Network error, DNS failure, timeout — log but don't throw
+    console.warn(`  [Verify] HEAD ${url} failed: ${err.message}`);
+    return false;
+  }
 }
 
 async function loadAllModels() {
@@ -298,6 +304,7 @@ async function main() {
             } catch (err) {
               summary.uploadErrors += 1;
               console.error(`  Upload failed for ${fileName}: ${err.message}`);
+              if (process.env.DEBUG) console.error(err.stack);
               continue;
             }
           }
